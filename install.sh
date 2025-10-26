@@ -190,8 +190,9 @@ fi
 # Configurar Nginx
 print_info "Configurando Nginx..."
 if [ -f "config/nginx-rtmp.conf" ]; then
-    # Actualizar domain en el archivo de configuración
+    # Actualizar domain y document root en el archivo de configuración
     sed "s/tu-dominio.com/${DOMAIN}/g" config/nginx-rtmp.conf > /usr/local/nginx/conf/nginx.conf
+    sed -i "s|root /var/www/streaming-platform/public;|root /var/www/streaming-platform/public;|g" /usr/local/nginx/conf/nginx.conf
 fi
 
 # Configurar PHP-FPM

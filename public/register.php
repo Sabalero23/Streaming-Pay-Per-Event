@@ -6,7 +6,7 @@ session_start();
 
 // Si ya está logueado, redirigir
 if (isset($_SESSION['user_id'])) {
-    header('Location: /profile.php');
+    header('Location: /public/profile.php');
     exit;
 }
 
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userId = $userModel->register($email, $password, $fullName, $phone);
             
             // Redirigir al login con mensaje de éxito
-            header('Location: /login.php?registered=1');
+            header('Location: /public/login.php?registered=1');
             exit;
             
         } catch (Exception $e) {
@@ -291,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <?php endif; ?>
             
-            <form method="POST" action="/register.php" id="registerForm">
+            <form method="POST" action="/public/register.php" id="registerForm">
                 <div class="form-group">
                     <label for="full_name">Nombre Completo <span class="required">*</span></label>
                     <input type="text" id="full_name" name="full_name" 
@@ -339,8 +339,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="checkbox-group">
                     <input type="checkbox" id="terms" name="terms" required>
                     <label for="terms">
-                        Acepto los <a href="/terms.php" target="_blank">términos y condiciones</a> 
-                        y la <a href="/privacy.php" target="_blank">política de privacidad</a>
+                        Acepto los <a href="/public/terms.php" target="_blank">términos y condiciones</a> 
+                        y la <a href="/public/privacy.php" target="_blank">política de privacidad</a>
                     </label>
                 </div>
                 
@@ -350,11 +350,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="divider">o</div>
             
             <div class="login-link">
-                ¿Ya tienes cuenta? <a href="/login.php">Inicia sesión aquí</a>
+                ¿Ya tienes cuenta? <a href="/public/login.php">Inicia sesión aquí</a>
             </div>
             
             <div class="back-home">
-                <a href="/">← Volver al inicio</a>
+                <a href="/public/">← Volver al inicio</a>
             </div>
         </div>
     </div>

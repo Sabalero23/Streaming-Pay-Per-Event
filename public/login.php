@@ -6,7 +6,7 @@ session_start();
 
 // Si ya está logueado, redirigir al inicio
 if (isset($_SESSION['user_id'])) {
-    header('Location: /profile.php');
+    header('Location: /public/profile.php');
     exit;
 }
 
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($user['role'] === 'admin') {
                 header('Location: /admin/dashboard.php');
             } else {
-                header('Location: /profile.php');
+                header('Location: /public/profile.php');
             }
             exit;
             
@@ -291,7 +291,7 @@ if (isset($_GET['verified'])) {
             </div>
             <?php endif; ?>
             
-            <form method="POST" action="/login.php">
+            <form method="POST" action="/public/login.php">
                 <div class="form-group">
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" 
@@ -313,7 +313,7 @@ if (isset($_GET['verified'])) {
                         <label for="remember">Recordarme</label>
                     </div>
                     
-                    <a href="/forgot-password.php" class="forgot-password">¿Olvidaste tu contraseña?</a>
+                    <a href="/public/forgot-password.php" class="forgot-password">¿Olvidaste tu contraseña?</a>
                 </div>
                 
                 <button type="submit" class="btn">Iniciar Sesión</button>
@@ -322,11 +322,11 @@ if (isset($_GET['verified'])) {
             <div class="divider">o</div>
             
             <div class="register-link">
-                ¿No tienes cuenta? <a href="/register.php">Regístrate aquí</a>
+                ¿No tienes cuenta? <a href="/public/register.php">Regístrate aquí</a>
             </div>
             
             <div class="back-home">
-                <a href="/">← Volver al inicio</a>
+                <a href="/public/">← Volver al inicio</a>
             </div>
         </div>
     </div>

@@ -18,10 +18,10 @@ $token = $_GET['token'] ?? null;
 
 // Si no hay ID o token, redirigir al inicio
 if (!$eventId || !$token) {
-    header('Location: /');
+    header('Location: /public/');
     exit;
 }
 
 // Redirigir al reproductor
-header('Location: /player.php?event_id=' . $eventId . '&token=' . $token);
+header('Location: /public/player.php?event_id=' . $eventId . '&token=' . $token);
 exit;

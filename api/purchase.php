@@ -31,6 +31,6 @@ try {
     
 } catch (Exception $e) {
     // Redirigir con error
-    header('Location: /event.php?id=' . ($eventId ?? '') . '&error=' . urlencode($e->getMessage()));
+    header('Location: /public/event.php?id=' . ($eventId ?? '') . '&error=' . urlencode($e->getMessage()));
     exit;
 }

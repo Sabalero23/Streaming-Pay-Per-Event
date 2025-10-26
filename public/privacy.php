@@ -140,10 +140,10 @@ session_start();
     <div class="header">
         <div class="container">
             <nav class="nav">
-                <a href="/" class="logo">🎥 Streaming Platform</a>
+                <a href="/public/" class="logo">🎥 Streaming Platform</a>
                 <div class="nav-links">
-                    <a href="/">Inicio</a>
-                    <a href="/events.php">Eventos</a>
+                    <a href="/public/">Inicio</a>
+                    <a href="/public/events.php">Eventos</a>
                 </div>
             </nav>
         </div>
@@ -384,9 +384,9 @@ session_start();
         <div class="container">
             <p>&copy; 2025 Streaming Platform. Todos los derechos reservados.</p>
             <p style="margin-top: 10px;">
-                <a href="/terms.php" style="color: #667eea; text-decoration: none;">Términos y Condiciones</a> · 
-                <a href="/privacy.php" style="color: #667eea; text-decoration: none;">Privacidad</a> · 
-                <a href="/contact.php" style="color: #667eea; text-decoration: none;">Contacto</a>
+                <a href="/public/terms.php" style="color: #667eea; text-decoration: none;">Términos y Condiciones</a> · 
+                <a href="/public/privacy.php" style="color: #667eea; text-decoration: none;">Privacidad</a> · 
+                <a href="/public/contact.php" style="color: #667eea; text-decoration: none;">Contacto</a>
             </p>
         </div>
     </div>

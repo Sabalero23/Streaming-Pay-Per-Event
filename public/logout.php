@@ -21,5 +21,5 @@ if (isset($_COOKIE['remember_token'])) {
 }
 
 // Redirigir al inicio
-header('Location: /?logout=1');
+header('Location: /public/?logout=1');
 exit;

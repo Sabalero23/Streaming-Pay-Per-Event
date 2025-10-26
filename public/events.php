@@ -328,16 +328,16 @@ $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
     <div class="header">
         <div class="container">
             <nav class="nav">
-                <a href="/" class="logo">🎥 Streaming Platform</a>
+                <a href="/public/" class="logo">🎥 Streaming Platform</a>
                 <div class="nav-links">
-                    <a href="/">Inicio</a>
-                    <a href="/events.php">Eventos</a>
+                    <a href="/public/">Inicio</a>
+                    <a href="/public/events.php">Eventos</a>
                     <?php if (isset($_SESSION['user_id'])): ?>
-                        <a href="/profile.php">Mi Cuenta</a>
-                        <a href="/logout.php">Salir</a>
+                        <a href="/public/profile.php">Mi Cuenta</a>
+                        <a href="/public/logout.php">Salir</a>
                     <?php else: ?>
-                        <a href="/login.php">Iniciar Sesión</a>
-                        <a href="/register.php">Registrarse</a>
+                        <a href="/public/login.php">Iniciar Sesión</a>
+                        <a href="/public/register.php">Registrarse</a>
                     <?php endif; ?>
                 </div>
             </nav>
@@ -352,7 +352,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
     </div>
     
     <div class="container">
-        <form class="filters" method="GET" action="/events.php">
+        <form class="filters" method="GET" action="/public/events.php">
             <div class="filter-group">
                 <label>Buscar</label>
                 <input type="text" name="search" placeholder="Nombre del evento..." value="<?= htmlspecialchars($search) ?>">
@@ -390,7 +390,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
         <?php if (!empty($events)): ?>
         <div class="events-grid">
             <?php foreach ($events as $event): ?>
-            <div class="event-card" onclick="location.href='/event.php?id=<?= $event['id'] ?>'">
+            <div class="event-card" onclick="location.href='/public/event.php?id=<?= $event['id'] ?>'">
                 <div class="event-thumbnail">
                     <?php if ($event['thumbnail_url']): ?>
                         <img src="<?= htmlspecialchars($event['thumbnail_url']) ?>" alt="<?= htmlspecialchars($event['title']) ?>">
@@ -435,9 +435,9 @@ $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
                         <span class="price"><?= $event['currency'] ?> <?= number_format($event['price'], 2) ?></span>
                         
                         <?php if ($event['status'] === 'live'): ?>
-                            <a href="/event.php?id=<?= $event['id'] ?>" class="btn btn-watch" onclick="event.stopPropagation()">Ver Ahora</a>
+                            <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn btn-watch" onclick="event.stopPropagation()">Ver Ahora</a>
                         <?php else: ?>
-                            <a href="/event.php?id=<?= $event['id'] ?>" class="btn" onclick="event.stopPropagation()">
+                            <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn" onclick="event.stopPropagation()">
                                 <?= $event['status'] === 'ended' ? 'Ver Detalles' : 'Comprar' ?>
                             </a>
                         <?php endif; ?>

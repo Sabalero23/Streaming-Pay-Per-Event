@@ -5,7 +5,7 @@
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /public/login.php');
     exit;
 }
 
@@ -17,7 +17,7 @@ $userModel = new User();
 $user = $userModel->findById($_SESSION['user_id']);
 
 if (!$user) {
-    header('Location: /logout.php');
+    header('Location: /public/logout.php');
     exit;
 }
 
@@ -207,12 +207,12 @@ $stats = $userModel->getStats($_SESSION['user_id']);
     <div class="header">
         <div class="container">
             <nav class="nav">
-                <a href="/" class="logo">🎥 Streaming Platform</a>
+                <a href="/public/" class="logo">🎥 Streaming Platform</a>
                 <div class="nav-links">
-                    <a href="/">Inicio</a>
-                    <a href="/events.php">Eventos</a>
-                    <a href="/profile.php">Mi Cuenta</a>
-                    <a href="/logout.php">Salir</a>
+                    <a href="/public/">Inicio</a>
+                    <a href="/public/events.php">Eventos</a>
+                    <a href="/public/profile.php">Mi Cuenta</a>
+                    <a href="/public/logout.php">Salir</a>
                 </div>
             </nav>
         </div>
@@ -261,13 +261,13 @@ $stats = $userModel->getStats($_SESSION['user_id']);
                 </div>
                 <div class="event-actions">
                     <?php if ($event['status'] === 'live'): ?>
-                        <a href="/watch/<?= $event['id'] ?>?token=<?= $event['access_token'] ?>" class="btn btn-success">
+                        <a href="/public/watch/<?= $event['id'] ?>?token=<?= $event['access_token'] ?>" class="btn btn-success">
                             🔴 Ver Ahora
                         </a>
                     <?php elseif ($event['status'] === 'scheduled'): ?>
                         <button class="btn btn-secondary" disabled>Próximamente</button>
                     <?php else: ?>
-                        <a href="/event.php?id=<?= $event['id'] ?>" class="btn btn-primary">Ver Detalles</a>
+                        <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn btn-primary">Ver Detalles</a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -277,7 +277,7 @@ $stats = $userModel->getStats($_SESSION['user_id']);
         <div class="no-events">
             <h3>No has comprado eventos aún</h3>
             <p>Explora nuestros eventos disponibles</p>
-            <a href="/events.php" class="btn btn-primary" style="display: inline-block; margin-top: 20px;">
+            <a href="/public/events.php" class="btn btn-primary" style="display: inline-block; margin-top: 20px;">
                 Ver Eventos
             </a>
         </div>

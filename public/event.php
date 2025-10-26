@@ -12,7 +12,7 @@ require_once __DIR__ . '/../src/Services/PaymentService.php';
 $eventId = $_GET['id'] ?? null;
 
 if (!$eventId) {
-    header('Location: /events.php');
+    header('Location: /public/events.php');
     exit;
 }
 
@@ -20,7 +20,7 @@ $eventModel = new Event();
 $event = $eventModel->findById($eventId);
 
 if (!$event) {
-    header('Location: /events.php');
+    header('Location: /public/events.php');
     exit;
 }
 
@@ -365,14 +365,14 @@ $error = $_GET['error'] ?? '';
     <div class="header">
         <div class="container">
             <nav class="nav">
-                <a href="/" class="logo">🎥 Streaming Platform</a>
+                <a href="/public/" class="logo">🎥 Streaming Platform</a>
                 <div class="nav-links">
-                    <a href="/">Inicio</a>
-                    <a href="/events.php">Eventos</a>
+                    <a href="/public/">Inicio</a>
+                    <a href="/public/events.php">Eventos</a>
                     <?php if (isset($_SESSION['user_id'])): ?>
-                        <a href="/profile.php">Mi Cuenta</a>
+                        <a href="/public/profile.php">Mi Cuenta</a>
                     <?php else: ?>
-                        <a href="/login.php">Iniciar Sesión</a>
+                        <a href="/public/login.php">Iniciar Sesión</a>
                     <?php endif; ?>
                 </div>
             </nav>
@@ -474,7 +474,7 @@ $error = $_GET['error'] ?? '';
                             </div>
                             
                             <?php if ($event['status'] === 'live'): ?>
-                                <a href="/watch/<?= $event['id'] ?>?token=<?= $purchase['access_token'] ?>" class="btn btn-danger">
+                                <a href="/public/watch/<?= $event['id'] ?>?token=<?= $purchase['access_token'] ?>" class="btn btn-danger">
                                     🔴 Ver Ahora
                                 </a>
                             <?php elseif ($event['status'] === 'scheduled'): ?>
@@ -495,7 +495,7 @@ $error = $_GET['error'] ?? '';
                             </div>
                             
                             <?php if (!isset($_SESSION['user_id'])): ?>
-                                <a href="/login.php?redirect=/event.php?id=<?= $event['id'] ?>" class="btn">
+                                <a href="/public/login.php?redirect=/event.php?id=<?= $event['id'] ?>" class="btn">
                                     Inicia sesión para comprar
                                 </a>
                             <?php elseif ($event['status'] === 'ended'): ?>

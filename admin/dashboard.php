@@ -6,7 +6,7 @@ session_start();
 
 // Verificar que sea administrador
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
-    header('Location: /login.php');
+    header('Location: /public/login.php');
     exit;
 }
 
@@ -207,8 +207,8 @@ $recent_purchases = $stmt->fetchAll();
             <a href="/admin/dashboard.php">Dashboard</a>
             <a href="/admin/events.php">Eventos</a>
             <a href="/admin/users.php">Usuarios</a>
-            <a href="/">Ver Sitio</a>
-            <a href="/logout.php">Salir</a>
+            <a href="/public/">Ver Sitio</a>
+            <a href="/public/logout.php">Salir</a>
         </nav>
     </div>
     
@@ -281,7 +281,7 @@ $recent_purchases = $stmt->fetchAll();
                             </span>
                         </td>
                         <td>
-                            <a href="/event.php?id=<?= $event['id'] ?>" class="btn btn-primary">Ver</a>
+                            <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn btn-primary">Ver</a>
                         </td>
                     </tr>
                     <?php endforeach; ?>

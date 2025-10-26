@@ -261,16 +261,16 @@ $liveEvents = $eventModel->getLiveEvents();
     <div class="header">
         <div class="container">
             <nav class="nav">
-                <a href="/" class="logo">🎥 Streaming Platform</a>
+                <a href="/public/" class="logo">🎥 Streaming Platform</a>
                 <div class="nav-links">
-                    <a href="/">Inicio</a>
-                    <a href="/events.php">Eventos</a>
+                    <a href="/public/">Inicio</a>
+                    <a href="/public/events.php">Eventos</a>
                     <?php if (isset($_SESSION['user_id'])): ?>
-                        <a href="/profile.php">Mi Cuenta</a>
-                        <a href="/logout.php">Salir</a>
+                        <a href="/public/profile.php">Mi Cuenta</a>
+                        <a href="/public/logout.php">Salir</a>
                     <?php else: ?>
-                        <a href="/login.php">Iniciar Sesión</a>
-                        <a href="/register.php">Registrarse</a>
+                        <a href="/public/login.php">Iniciar Sesión</a>
+                        <a href="/public/register.php">Registrarse</a>
                     <?php endif; ?>
                 </div>
             </nav>
@@ -290,7 +290,7 @@ $liveEvents = $eventModel->getLiveEvents();
             <div class="live-badge">EN VIVO AHORA</div>
             <div class="events-grid">
                 <?php foreach ($liveEvents as $event): ?>
-                <div class="event-card" onclick="location.href='/event.php?id=<?= $event['id'] ?>'">
+                <div class="event-card" onclick="location.href='/public/event.php?id=<?= $event['id'] ?>'">
                     <div class="event-thumbnail">
                         <?php if ($event['thumbnail_url']): ?>
                             <img src="<?= htmlspecialchars($event['thumbnail_url']) ?>" alt="<?= htmlspecialchars($event['title']) ?>">
@@ -306,7 +306,7 @@ $liveEvents = $eventModel->getLiveEvents();
                         </p>
                         <div class="event-price">
                             <span class="price"><?= $event['currency'] ?> <?= number_format($event['price'], 2) ?></span>
-                            <a href="/event.php?id=<?= $event['id'] ?>" class="btn">Ver Ahora</a>
+                            <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Ver Ahora</a>
                         </div>
                     </div>
                 </div>
@@ -323,7 +323,7 @@ $liveEvents = $eventModel->getLiveEvents();
             <?php if (!empty($upcomingEvents)): ?>
             <div class="events-grid">
                 <?php foreach ($upcomingEvents as $event): ?>
-                <div class="event-card" onclick="location.href='/event.php?id=<?= $event['id'] ?>'">
+                <div class="event-card" onclick="location.href='/public/event.php?id=<?= $event['id'] ?>'">
                     <div class="event-thumbnail">
                         <?php if ($event['thumbnail_url']): ?>
                             <img src="<?= htmlspecialchars($event['thumbnail_url']) ?>" alt="<?= htmlspecialchars($event['title']) ?>">
@@ -339,7 +339,7 @@ $liveEvents = $eventModel->getLiveEvents();
                         </p>
                         <div class="event-price">
                             <span class="price"><?= $event['currency'] ?> <?= number_format($event['price'], 2) ?></span>
-                            <a href="/event.php?id=<?= $event['id'] ?>" class="btn">Comprar</a>
+                            <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Comprar</a>
                         </div>
                     </div>
                 </div>
@@ -385,9 +385,9 @@ $liveEvents = $eventModel->getLiveEvents();
         <div class="container">
             <p>&copy; 2025 Streaming Platform. Todos los derechos reservados.</p>
             <p style="margin-top: 10px;">
-                <a href="/terms.php" style="color: #667eea; text-decoration: none;">Términos</a> · 
-                <a href="/privacy.php" style="color: #667eea; text-decoration: none;">Privacidad</a> · 
-                <a href="/contact.php" style="color: #667eea; text-decoration: none;">Contacto</a>
+                <a href="/public/terms.php" style="color: #667eea; text-decoration: none;">Términos</a> · 
+                <a href="/public/privacy.php" style="color: #667eea; text-decoration: none;">Privacidad</a> · 
+                <a href="/public/contact.php" style="color: #667eea; text-decoration: none;">Contacto</a>
             </p>
         </div>
     </div>
