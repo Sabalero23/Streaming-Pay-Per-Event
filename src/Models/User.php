@@ -10,14 +10,18 @@ class User extends Model {
         parent::__construct();
     }
     
-    // Buscar usuario por email
+    /**
+     * Buscar usuario por email
+     */
     public function findByEmail($email) {
         $sql = "SELECT * FROM {$this->table} WHERE email = ? LIMIT 1";
         $stmt = $this->query($sql, [$email]);
-        return $stmt->fetch();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
     
-    // Registrar nuevo usuario
+    /**
+     * Registrar nuevo usuario
+     */
     public function register($email, $password, $fullName, $phone = null) {
         // Verificar si el email ya existe
         if ($this->findByEmail($email)) {
@@ -25,7 +29,7 @@ class User extends Model {
         }
         
         // Hash de la contraseña
-        $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+        $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 10]);
         
         // Token de verificación
         $verificationToken = bin2hex(random_bytes(32));
@@ -37,29 +41,34 @@ class User extends Model {
             'phone' => $phone,
             'verification_token' => $verificationToken,
             'role' => 'user',
-            'status' => 'active'
+            'status' => 'active',
+            'email_verified' => 0,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
         ];
         
         $userId = $this->create($data);
         
-        // Enviar email de verificación (implementar)
-        $this->sendVerificationEmail($email, $verificationToken);
-        
         return $userId;
     }
     
-    // Login
+    /**
+     * Login de usuario
+     */
     public function login($email, $password) {
+        // Buscar usuario por email
         $user = $this->findByEmail($email);
         
         if (!$user) {
             throw new Exception("Credenciales inválidas");
         }
         
+        // Verificar contraseña
         if (!password_verify($password, $user['password_hash'])) {
             throw new Exception("Credenciales inválidas");
         }
         
+        // Verificar estado
         if ($user['status'] !== 'active') {
             throw new Exception("Cuenta suspendida o inactiva");
         }
@@ -73,11 +82,13 @@ class User extends Model {
         return $user;
     }
     
-    // Verificar email
+    /**
+     * Verificar email
+     */
     public function verifyEmail($token) {
         $sql = "SELECT * FROM {$this->table} WHERE verification_token = ? LIMIT 1";
         $stmt = $this->query($sql, [$token]);
-        $user = $stmt->fetch();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$user) {
             throw new Exception("Token inválido");
@@ -91,13 +102,14 @@ class User extends Model {
         return true;
     }
     
-    // Solicitar reset de contraseña
+    /**
+     * Solicitar reset de contraseña
+     */
     public function requestPasswordReset($email) {
         $user = $this->findByEmail($email);
         
         if (!$user) {
-            // No revelar si el email existe o no por seguridad
-            return true;
+            return true; // No revelar si existe
         }
         
         $resetToken = bin2hex(random_bytes(32));
@@ -108,26 +120,25 @@ class User extends Model {
             [$resetToken, $expires, $user['id']]
         );
         
-        // Enviar email con enlace de reset
-        $this->sendPasswordResetEmail($email, $resetToken);
-        
         return true;
     }
     
-    // Reset de contraseña
+    /**
+     * Reset de contraseña
+     */
     public function resetPassword($token, $newPassword) {
         $sql = "SELECT * FROM {$this->table} 
                 WHERE reset_token = ? 
                 AND reset_token_expires > NOW() 
                 LIMIT 1";
         $stmt = $this->query($sql, [$token]);
-        $user = $stmt->fetch();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$user) {
             throw new Exception("Token inválido o expirado");
         }
         
-        $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 10]);
         
         $this->query(
             "UPDATE {$this->table} 
@@ -139,7 +150,9 @@ class User extends Model {
         return true;
     }
     
-    // Verificar si el usuario tiene acceso a un evento
+    /**
+     * Verificar si el usuario tiene acceso a un evento
+     */
     public function hasAccessToEvent($userId, $eventId) {
         $sql = "SELECT COUNT(*) as count 
                 FROM purchases 
@@ -149,12 +162,14 @@ class User extends Model {
                 AND (expires_at IS NULL OR expires_at > NOW())";
         
         $stmt = $this->query($sql, [$userId, $eventId]);
-        $result = $stmt->fetch();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
         return $result['count'] > 0;
     }
     
-    // Obtener eventos comprados por el usuario
+    /**
+     * Obtener eventos comprados por el usuario
+     */
     public function getPurchasedEvents($userId) {
         $sql = "SELECT e.*, p.purchased_at, p.expires_at, p.access_token
                 FROM events e
@@ -163,61 +178,16 @@ class User extends Model {
                 ORDER BY p.purchased_at DESC";
         
         $stmt = $this->query($sql, [$userId]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    // Enviar email de verificación
-    private function sendVerificationEmail($email, $token) {
-        $verifyUrl = getenv('APP_URL') . "/verify-email?token=" . $token;
-        
-        $subject = "Verifica tu cuenta";
-        $message = "
-            <html>
-            <body>
-                <h2>Bienvenido a nuestra plataforma de streaming</h2>
-                <p>Por favor verifica tu cuenta haciendo clic en el siguiente enlace:</p>
-                <a href='{$verifyUrl}'>Verificar Email</a>
-                <p>Este enlace expira en 24 horas.</p>
-            </body>
-            </html>
-        ";
-        
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "Content-type: text/html; charset=UTF-8\r\n";
-        $headers .= "From: noreply@tu-dominio.com\r\n";
-        
-        mail($email, $subject, $message, $headers);
-    }
-    
-    // Enviar email de reset de contraseña
-    private function sendPasswordResetEmail($email, $token) {
-        $resetUrl = getenv('APP_URL') . "/reset-password?token=" . $token;
-        
-        $subject = "Restablecer contraseña";
-        $message = "
-            <html>
-            <body>
-                <h2>Solicitud de restablecimiento de contraseña</h2>
-                <p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p>
-                <a href='{$resetUrl}'>Restablecer Contraseña</a>
-                <p>Este enlace expira en 1 hora.</p>
-                <p>Si no solicitaste este cambio, ignora este email.</p>
-            </body>
-            </html>
-        ";
-        
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "Content-type: text/html; charset=UTF-8\r\n";
-        $headers .= "From: noreply@tu-dominio.com\r\n";
-        
-        mail($email, $subject, $message, $headers);
-    }
-    
-    // Obtener estadísticas del usuario
+    /**
+     * Obtener estadísticas del usuario
+     */
     public function getStats($userId) {
         $sql = "SELECT 
                     COUNT(DISTINCT p.event_id) as events_purchased,
-                    SUM(p.amount) as total_spent,
+                    COALESCE(SUM(p.amount), 0) as total_spent,
                     COUNT(DISTINCT a.id) as total_views
                 FROM users u
                 LEFT JOIN purchases p ON u.id = p.user_id AND p.status = 'completed'
@@ -226,6 +196,16 @@ class User extends Model {
                 GROUP BY u.id";
         
         $stmt = $this->query($sql, [$userId]);
-        return $stmt->fetch();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$result) {
+            return [
+                'events_purchased' => 0,
+                'total_spent' => 0,
+                'total_views' => 0
+            ];
+        }
+        
+        return $result;
     }
 }

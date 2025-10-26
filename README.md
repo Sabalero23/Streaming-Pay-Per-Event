@@ -141,7 +141,7 @@ Acceder a: `https://tu-servidor.com/admin`
 
 Usuario por defecto:
 - Email: admin@streaming.com
-- Password: changeme123
+- Password: admin123
 
 ## 🔒 Seguridad
 
