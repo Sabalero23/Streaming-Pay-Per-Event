@@ -20,7 +20,10 @@ if (!$event) {
 
 $page_title = $event['title'];
 
-// Verificar si el usuario ya compró el evento
+// Verificar si el evento es gratuito
+$isFree = (float)$event['price'] === 0.0;
+
+// Verificar si el usuario ya compró/accedió al evento
 $hasPurchased = false;
 if (isset($_SESSION['user_id'])) {
     $stmt = $db->prepare("SELECT id FROM purchases WHERE user_id = ? AND event_id = ? AND status = 'completed'");
@@ -28,7 +31,7 @@ if (isset($_SESSION['user_id'])) {
     $hasPurchased = $stmt->fetch() !== false;
 }
 
-// Procesar compra
+// Procesar compra o acceso gratuito
 $error = '';
 $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
@@ -37,13 +40,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
         exit;
     }
     
-    // Crear compra
     try {
-        $stmt = $db->prepare("INSERT INTO purchases (user_id, event_id, amount, currency, status, purchased_at) VALUES (?, ?, ?, ?, 'completed', NOW())");
-        $stmt->execute([$_SESSION['user_id'], $event_id, $event['price'], $event['currency']]);
-        $success = "¡Compra realizada con éxito! Ya puedes ver el evento.";
+        // Generar ID de transacción único
+        $transaction_id = 'TXN-' . strtoupper(uniqid()) . '-' . time();
+        
+        // Generar token de acceso único
+        $access_token = bin2hex(random_bytes(32));
+        
+        if ($isFree) {
+            // Evento gratuito - acceso inmediato sin pago
+            $stmt = $db->prepare("
+                INSERT INTO purchases 
+                (user_id, event_id, transaction_id, payment_method, amount, currency, status, access_token, purchased_at) 
+                VALUES (?, ?, ?, 'free', 0.00, ?, 'completed', ?, NOW())
+            ");
+            $stmt->execute([
+                $_SESSION['user_id'], 
+                $event_id, 
+                $transaction_id,
+                $event['currency'],
+                $access_token
+            ]);
+            
+            $success = "¡Acceso obtenido con éxito! Ya puedes ver el evento.";
+        } else {
+            // Evento de pago - registrar compra pendiente
+            $stmt = $db->prepare("
+                INSERT INTO purchases 
+                (user_id, event_id, transaction_id, payment_method, amount, currency, status, access_token, purchased_at) 
+                VALUES (?, ?, ?, 'pending', ?, ?, 'pending', ?, NOW())
+            ");
+            $stmt->execute([
+                $_SESSION['user_id'], 
+                $event_id, 
+                $transaction_id,
+                $event['price'],
+                $event['currency'],
+                $access_token
+            ]);
+            
+            // Redireccionar a pasarela de pago (implementar según tu método)
+            // header('Location: /public/checkout.php?purchase_id=' . $db->lastInsertId());
+            // exit;
+            
+            // Por ahora, marcar como completado (temporal)
+            $purchase_id = $db->lastInsertId();
+            $stmt = $db->prepare("UPDATE purchases SET status = 'completed' WHERE id = ?");
+            $stmt->execute([$purchase_id]);
+            
+            $success = "¡Compra realizada con éxito! Ya puedes ver el evento.";
+        }
+        
         $hasPurchased = true;
+        
+        // Registrar en analytics
+        try {
+            $stmt = $db->prepare("
+                INSERT INTO analytics 
+                (event_id, user_id, action, details, ip_address, user_agent) 
+                VALUES (?, ?, 'purchase', ?, ?, ?)
+            ");
+            $stmt->execute([
+                $event_id,
+                $_SESSION['user_id'],
+                json_encode([
+                    'amount' => $event['price'],
+                    'currency' => $event['currency'],
+                    'payment_method' => $isFree ? 'free' : 'pending',
+                    'transaction_id' => $transaction_id
+                ]),
+                $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+            ]);
+        } catch (Exception $e) {
+            error_log("Analytics error: " . $e->getMessage());
+        }
+        
     } catch (Exception $e) {
+        error_log("Purchase error: " . $e->getMessage());
         $error = "Error al procesar la compra. Intenta nuevamente.";
     }
 }
@@ -115,6 +189,16 @@ require_once 'styles.php';
     border-bottom: none;
 }
 
+.free-badge {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    display: inline-block;
+    font-size: 14px;
+}
+
 @media (max-width: 768px) {
     .event-main {
         grid-template-columns: 1fr;
@@ -142,8 +226,13 @@ require_once 'styles.php';
         <?php endif; ?>
 
         <div class="event-hero">
-            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                 <span class="event-category"><?= htmlspecialchars($event['category']) ?></span>
+                
+                <?php if ($isFree): ?>
+                <span class="free-badge">🎁 GRATIS</span>
+                <?php endif; ?>
+                
                 <?php if ($event['status'] === 'live'): ?>
                 <span class="badge-live">🔴 EN VIVO</span>
                 <?php elseif ($event['status'] === 'scheduled'): ?>
@@ -194,9 +283,15 @@ require_once 'styles.php';
                     <span style="font-size: 24px;">💰</span>
                     <div>
                         <strong>Precio</strong><br>
+                        <?php if ($isFree): ?>
+                        <span style="color: #4CAF50; font-size: 24px; font-weight: bold;">
+                            GRATIS
+                        </span>
+                        <?php else: ?>
                         <span style="color: #4CAF50; font-size: 24px; font-weight: bold;">
                             <?= $event['currency'] ?> <?= number_format($event['price'], 2) ?>
                         </span>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -226,7 +321,7 @@ require_once 'styles.php';
 
                 <?php if ($hasPurchased): ?>
                     <div class="alert alert-success" style="margin-bottom: 20px;">
-                        ✅ Ya compraste este evento
+                        ✅ Ya tienes acceso a este evento
                     </div>
 
                     <?php if ($event['status'] === 'live'): ?>
@@ -235,8 +330,8 @@ require_once 'styles.php';
                         </a>
                     <?php elseif ($event['status'] === 'ended'): ?>
                         <?php if ($event['enable_recording']): ?>
-                        <a href="/public/watch.php?id=<?= $event_id ?>" class="btn btn-primary" style="width: 100%; text-align: center;">
-                            📹 Ver Grabación
+                        <a style="width: 100%; text-align: center;">
+                            🔴 Evento Finalizado
                         </a>
                         <?php else: ?>
                         <p style="text-align: center; color: #999;">
@@ -252,24 +347,43 @@ require_once 'styles.php';
 
                 <?php else: ?>
                     <div style="text-align: center; margin-bottom: 20px;">
+                        <?php if ($isFree): ?>
+                        <div style="font-size: 48px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">
+                            GRATIS
+                        </div>
+                        <p style="color: #999;">Acceso sin costo</p>
+                        <?php else: ?>
                         <div style="font-size: 48px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">
                             <?= $event['currency'] ?> <?= number_format($event['price'], 2) ?>
                         </div>
                         <p style="color: #999;">Pago único</p>
+                        <?php endif; ?>
                     </div>
 
                     <?php if (isset($_SESSION['user_id'])): ?>
                         <form method="POST">
                             <button type="submit" name="purchase" class="btn btn-primary" style="width: 100%; font-size: 18px; padding: 15px;">
+                                <?php if ($isFree): ?>
+                                🎁 Obtener Acceso Gratis
+                                <?php else: ?>
                                 🎫 Comprar Ahora
+                                <?php endif; ?>
                             </button>
                         </form>
                         <p style="text-align: center; color: #999; font-size: 13px; margin-top: 15px;">
+                            <?php if ($isFree): ?>
+                            Acceso inmediato sin costo
+                            <?php else: ?>
                             Pago seguro y acceso inmediato
+                            <?php endif; ?>
                         </p>
                     <?php else: ?>
                         <a href="/public/login.php?redirect=<?= urlencode($_SERVER['REQUEST_URI']) ?>" class="btn btn-primary" style="width: 100%; text-align: center; font-size: 18px; padding: 15px;">
-                            🔐 Inicia Sesión para Comprar
+                            <?php if ($isFree): ?>
+                            🔓 Inicia Sesión para Acceder
+                            <?php else: ?>
+                            🔓 Inicia Sesión para Comprar
+                            <?php endif; ?>
                         </a>
                     <?php endif; ?>
                 <?php endif; ?>

@@ -1,6 +1,6 @@
 <?php
 // admin/events.php
-// Gestión de eventos (CRUD completo)
+// Gestión de eventos (CRUD completo + Control de transmisión)
 
 session_start();
 
@@ -25,7 +25,74 @@ $action = $_GET['action'] ?? 'list';
 $error = '';
 $success = '';
 
-// Procesar acciones
+// NUEVO: Cambiar estado de transmisión
+if ($action === 'toggle_live' && isset($_GET['id'])) {
+    try {
+        $eventId = $_GET['id'];
+        $event = $eventModel->findById($eventId);
+        
+        if (!$event) {
+            throw new Exception("Evento no encontrado");
+        }
+        
+        // Verificar permisos
+        if ($isStreamer && $event['created_by'] != $userId) {
+            throw new Exception("No tienes permiso para controlar este evento");
+        }
+        
+        // Cambiar estado
+        if ($event['status'] === 'scheduled') {
+            // Activar transmisión
+            $stmt = $db->prepare("UPDATE events SET status = 'live', actual_start = NOW() WHERE id = ?");
+            $stmt->execute([$eventId]);
+            $success = "✅ Transmisión ACTIVADA - El evento está EN VIVO";
+        } elseif ($event['status'] === 'live') {
+            // Desactivar transmisión
+            $stmt = $db->prepare("UPDATE events SET status = 'ended', actual_end = NOW() WHERE id = ?");
+            $stmt->execute([$eventId]);
+            $success = "ℹ️ Transmisión FINALIZADA - El evento ha terminado";
+        } else {
+            throw new Exception("No se puede cambiar el estado desde: " . $event['status']);
+        }
+        
+        $action = 'list';
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+        $action = 'list';
+    }
+}
+
+// NUEVO: Reactivar evento finalizado
+if ($action === 'reactivate' && isset($_GET['id'])) {
+    try {
+        $eventId = $_GET['id'];
+        $event = $eventModel->findById($eventId);
+        
+        if (!$event) {
+            throw new Exception("Evento no encontrado");
+        }
+        
+        // Verificar permisos
+        if ($isStreamer && $event['created_by'] != $userId) {
+            throw new Exception("No tienes permiso para reactivar este evento");
+        }
+        
+        if ($event['status'] === 'ended') {
+            $stmt = $db->prepare("UPDATE events SET status = 'scheduled', actual_start = NULL, actual_end = NULL WHERE id = ?");
+            $stmt->execute([$eventId]);
+            $success = "🔄 Evento reactivado - Ahora está PROGRAMADO";
+        } else {
+            throw new Exception("Solo se pueden reactivar eventos finalizados");
+        }
+        
+        $action = 'list';
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+        $action = 'list';
+    }
+}
+
+// Procesar acciones de creación/edición
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create' || $action === 'edit') {
         $data = [
@@ -134,6 +201,82 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
+<style>
+.live-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.btn-live {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.btn-live:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+}
+
+.btn-live.active {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    animation: pulse 2s infinite;
+}
+
+.btn-end {
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+    color: white;
+}
+
+.btn-reactivate {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+
+.status-dot.live {
+    background: #e74c3c;
+}
+
+.status-dot.scheduled {
+    background: #27ae60;
+    animation: none;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+</style>
+
 <?php if ($error): ?>
 <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
@@ -173,7 +316,7 @@ require_once 'styles.php';
                     <th>Fecha</th>
                     <th>Precio</th>
                     <th>Estado</th>
-                    <th>Stream Key</th>
+                    <th>Control</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -198,11 +341,36 @@ require_once 'styles.php';
                         ];
                         $badgeClass = $badges[$evt['status']] ?? 'badge-info';
                         ?>
-                        <span class="badge <?= $badgeClass ?>">
+                        <span class="badge <?= $badgeClass ?> status-indicator">
+                            <?php if ($evt['status'] === 'live'): ?>
+                                <span class="status-dot live"></span>
+                            <?php endif; ?>
                             <?= strtoupper($evt['status']) ?>
                         </span>
                     </td>
-                    <td><code style="font-size:11px;"><?= substr($evt['stream_key'], 0, 15) ?>...</code></td>
+                    <td>
+                        <?php if ($evt['status'] === 'scheduled'): ?>
+                            <a href="?action=toggle_live&id=<?= $evt['id'] ?>" 
+                               class="btn-live"
+                               onclick="return confirm('¿Activar transmisión EN VIVO?')">
+                                ▶️ INICIAR
+                            </a>
+                        <?php elseif ($evt['status'] === 'live'): ?>
+                            <a href="?action=toggle_live&id=<?= $evt['id'] ?>" 
+                               class="btn-live btn-end"
+                               onclick="return confirm('¿Finalizar transmisión?')">
+                                ⏹️ FINALIZAR
+                            </a>
+                        <?php elseif ($evt['status'] === 'ended'): ?>
+                            <a href="?action=reactivate&id=<?= $evt['id'] ?>" 
+                               class="btn-live btn-reactivate"
+                               onclick="return confirm('¿Reactivar este evento?')">
+                                🔄 REACTIVAR
+                            </a>
+                        <?php else: ?>
+                            <span style="color: #95a5a6;">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <a href="?action=edit&id=<?= $evt['id'] ?>" class="btn btn-primary">✏️</a>
                         <a href="?action=delete&id=<?= $evt['id'] ?>" class="btn btn-danger" 
@@ -234,6 +402,30 @@ require_once 'styles.php';
     <form method="POST" action="?action=<?= $action ?><?= $event ? '&id=' . $event['id'] : '' ?>">
         <?php if ($event): ?>
         <input type="hidden" name="event_id" value="<?= $event['id'] ?>">
+        
+        <!-- NUEVO: Control de transmisión en el formulario de edición -->
+        <?php if ($event['status'] === 'scheduled' || $event['status'] === 'live'): ?>
+        <div class="live-controls" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <strong>Control de Transmisión:</strong>
+            <?php if ($event['status'] === 'scheduled'): ?>
+                <a href="?action=toggle_live&id=<?= $event['id'] ?>" 
+                   class="btn-live"
+                   onclick="return confirm('¿Activar transmisión EN VIVO?')">
+                    ▶️ INICIAR TRANSMISIÓN
+                </a>
+            <?php elseif ($event['status'] === 'live'): ?>
+                <span class="badge badge-live status-indicator" style="padding: 10px 15px; font-size: 14px;">
+                    <span class="status-dot live"></span>
+                    TRANSMITIENDO EN VIVO
+                </span>
+                <a href="?action=toggle_live&id=<?= $event['id'] ?>" 
+                   class="btn-live btn-end"
+                   onclick="return confirm('¿Finalizar transmisión?')">
+                    ⏹️ FINALIZAR TRANSMISIÓN
+                </a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
         <?php endif; ?>
         
         <div class="form-grid">
@@ -310,26 +502,68 @@ require_once 'styles.php';
         <div class="stream-key-box">
             <strong>🔑 Stream Key (para OBS):</strong><br>
             <code><?= $event['stream_key'] ?></code>
-            <p style="margin-top:10px; color:#666; font-size:13px;">
-                <strong>Configuración OBS:</strong><br>
-                • Servidor: <code><?= getenv('RTMP_HOST') ?: 'rtmp://streaming.cellcomweb.com.ar/live' ?></code><br>
-                • Clave de transmisión: <code><?= $event['stream_key'] ?></code>
-            </p>
+            
             <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
+            
             <p style="margin-top:10px; color:#666; font-size:13px;">
-                <strong>📺 URL completa para OBS:</strong><br>
-                <code style="background: #2c3e50; color: #4CAF50; padding: 8px; display: block; margin-top: 5px; border-radius: 4px; word-break: break-all;">
-                    <?= getenv('RTMP_HOST') ?: 'rtmp://streaming.cellcomweb.com.ar/live' ?>/<?= $event['stream_key'] ?>
+                <strong>📡 Configuración para OBS Studio:</strong><br>
+            </p>
+            
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                <p style="margin: 5px 0; font-size: 13px;">
+                    <strong>Servidor RTMP:</strong><br>
+                    <code style="background: #2c3e50; color: #3498db; padding: 5px 10px; display: inline-block; border-radius: 4px;">
+                        rtmp://streaming.cellcomweb.com.ar/live
+                    </code>
+                </p>
+                
+                <p style="margin: 15px 0 5px 0; font-size: 13px;">
+                    <strong>Clave de transmisión:</strong><br>
+                    <code style="background: #2c3e50; color: #e74c3c; padding: 5px 10px; display: inline-block; border-radius: 4px;">
+                        <?= $event['stream_key'] ?>
+                    </code>
+                </p>
+            </div>
+            
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
+            
+            <p style="margin-top:10px; color:#666; font-size:13px;">
+                <strong>🎬 URL completa (copiar en OBS):</strong><br>
+                <code style="background: #2c3e50; color: #4CAF50; padding: 8px; display: block; margin-top: 5px; border-radius: 4px; word-break: break-all; font-size: 12px;">
+                    rtmp://streaming.cellcomweb.com.ar/live/<?= $event['stream_key'] ?>
                 </code>
             </p>
+            
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
+            
+            <p style="margin-top:10px; color:#999; font-size:12px; font-style: italic;">
+                <strong>💡 Para ver el stream en navegador:</strong><br>
+                <code style="background: #f8f9fa; color: #7f8c8d; padding: 5px; display: block; margin-top: 5px; border-radius: 4px; word-break: break-all; font-size: 11px;">
+                    http://streaming.cellcomweb.com.ar:8889/live/<?= $event['stream_key'] ?>/index.m3u8
+                </code>
+            </p>
+            
+            <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                <strong style="color: #856404;">⚠️ Instrucciones OBS:</strong>
+                <ol style="margin: 10px 0 0 20px; padding: 0; color: #856404; font-size: 13px;">
+                    <li>Abrir OBS Studio</li>
+                    <li>Ir a <strong>Configuración → Emisión</strong></li>
+                    <li>Seleccionar <strong>Servicio: Personalizado</strong></li>
+                    <li>Pegar el servidor RTMP arriba</li>
+                    <li>Pegar la clave de transmisión</li>
+                    <li>Clic en <strong>Aplicar</strong> y <strong>Aceptar</strong></li>
+                    <li>Clic en <strong>Iniciar transmisión</strong></li>
+                    <li>Luego hacer clic en <strong>▶️ INICIAR</strong> aquí para activar el evento</li>
+                </ol>
+            </div>
         </div>
         <?php endif; ?>
         
-        <div style="margin-top:30px;">
-            <button type="submit" class="btn btn-success">
-                <?= $action === 'create' ? '✅ Crear Evento' : '💾 Guardar Cambios' ?>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                <?= $action === 'create' ? '✨ Crear Evento' : '💾 Guardar Cambios' ?>
             </button>
-            <a href="?" class="btn">Cancelar</a>
+            <a href="?" class="btn btn-secondary">❌ Cancelar</a>
         </div>
     </form>
 </div>

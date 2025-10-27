@@ -94,11 +94,33 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
             transition: background 0.3s;
             font-size: 14px;
             white-space: nowrap;
+            position: relative;
         }
         
         .admin-nav a:hover,
         .admin-nav a.active {
             background: rgba(255,255,255,0.2);
+        }
+        
+        /* Badge de notificación para sesiones activas */
+        .nav-badge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: #e74c3c;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: bold;
+            min-width: 18px;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
         
         .user-info {
@@ -253,6 +275,16 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
                 </a>
                 <?php endif; ?>
                 
+                <?php if ($isAdmin): ?>
+                <!-- NUEVO: Monitor de Sesiones (solo para admin) -->
+                <a href="/admin/sessions_monitor.php" 
+                   class="<?= basename($_SERVER['PHP_SELF']) === 'sessions_monitor.php' ? 'active' : '' ?>"
+                   id="sessionsLink">
+                    🔍 Sesiones
+                    <span class="nav-badge" id="sessionsBadge" style="display: none;">0</span>
+                </a>
+                <?php endif; ?>
+                
                 <a href="/public/" style="border-left: 1px solid rgba(255,255,255,0.2); margin-left: 10px; padding-left: 15px;">
                     🌐 Ver Sitio
                 </a>
@@ -285,3 +317,54 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
     
     <div class="main-content">
         <div class="container">
+
+<script>
+// Toggle menú móvil
+const menuToggle = document.getElementById('menuToggle');
+const adminNav = document.getElementById('adminNav');
+const navOverlay = document.getElementById('navOverlay');
+
+if (menuToggle) {
+    menuToggle.addEventListener('click', function() {
+        adminNav.classList.toggle('active');
+        navOverlay.classList.toggle('active');
+    });
+}
+
+if (navOverlay) {
+    navOverlay.addEventListener('click', function() {
+        adminNav.classList.remove('active');
+        navOverlay.classList.remove('active');
+    });
+}
+
+// Cerrar menú al hacer click en un link
+adminNav.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', function() {
+        adminNav.classList.remove('active');
+        navOverlay.classList.remove('active');
+    });
+});
+
+<?php if ($isAdmin): ?>
+// Actualizar badge de sesiones activas (solo para admin)
+function updateSessionsBadge() {
+    fetch('/api/admin/sessions_count.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.active_sessions > 0) {
+                const badge = document.getElementById('sessionsBadge');
+                if (badge) {
+                    badge.textContent = data.active_sessions;
+                    badge.style.display = 'block';
+                }
+            }
+        })
+        .catch(error => console.error('Error updating sessions badge:', error));
+}
+
+// Actualizar cada 30 segundos
+updateSessionsBadge();
+setInterval(updateSessionsBadge, 30000);
+<?php endif; ?>
+</script>

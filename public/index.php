@@ -28,12 +28,18 @@ require_once 'styles.php';
         <div class="live-badge">EN VIVO AHORA</div>
         <div class="events-grid">
             <?php foreach ($liveEvents as $event): ?>
+            <?php $isFree = (float)$event['price'] === 0.0; ?>
             <div class="event-card" onclick="location.href='/public/event.php?id=<?= $event['id'] ?>'">
                 <div class="event-thumbnail">
                     <?php if ($event['thumbnail_url']): ?>
                         <img src="<?= htmlspecialchars($event['thumbnail_url']) ?>" alt="<?= htmlspecialchars($event['title']) ?>">
                     <?php else: ?>
                         ⚽
+                    <?php endif; ?>
+                    <?php if ($isFree): ?>
+                    <div style="position: absolute; top: 10px; right: 10px; background: #4CAF50; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold;">
+                        GRATIS
+                    </div>
                     <?php endif; ?>
                 </div>
                 <div class="event-info">
@@ -43,8 +49,13 @@ require_once 'styles.php';
                         🔴 En vivo · <?= $event['current_viewers'] ?? 0 ?> espectadores
                     </p>
                     <div class="event-price">
+                        <?php if ($isFree): ?>
+                        <span class="price" style="color: #4CAF50;">GRATIS</span>
+                        <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Acceder Ahora</a>
+                        <?php else: ?>
                         <span class="price"><?= $event['currency'] ?> <?= number_format($event['price'], 2) ?></span>
                         <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Ver Ahora</a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -61,12 +72,18 @@ require_once 'styles.php';
         <?php if (!empty($upcomingEvents)): ?>
         <div class="events-grid">
             <?php foreach ($upcomingEvents as $event): ?>
+            <?php $isFree = (float)$event['price'] === 0.0; ?>
             <div class="event-card" onclick="location.href='/public/event.php?id=<?= $event['id'] ?>'">
                 <div class="event-thumbnail">
                     <?php if ($event['thumbnail_url']): ?>
                         <img src="<?= htmlspecialchars($event['thumbnail_url']) ?>" alt="<?= htmlspecialchars($event['title']) ?>">
                     <?php else: ?>
                         ⚽
+                    <?php endif; ?>
+                    <?php if ($isFree): ?>
+                    <div style="position: absolute; top: 10px; right: 10px; background: #4CAF50; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold;">
+                        GRATIS
+                    </div>
                     <?php endif; ?>
                 </div>
                 <div class="event-info">
@@ -76,8 +93,13 @@ require_once 'styles.php';
                         📅 <?= date('d/m/Y H:i', strtotime($event['scheduled_start'])) ?>
                     </p>
                     <div class="event-price">
+                        <?php if ($isFree): ?>
+                        <span class="price" style="color: #4CAF50;">GRATIS</span>
+                        <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Registrarse</a>
+                        <?php else: ?>
                         <span class="price"><?= $event['currency'] ?> <?= number_format($event['price'], 2) ?></span>
                         <a href="/public/event.php?id=<?= $event['id'] ?>" class="btn">Comprar</a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
