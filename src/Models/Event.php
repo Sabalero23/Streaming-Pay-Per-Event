@@ -10,6 +10,38 @@ class Event extends Model {
         parent::__construct();
     }
     
+    // MÉTODO AGREGADO: Obtener todos los eventos con filtros
+    public function getAllEvents($category = '', $status = '') {
+        $sql = "SELECT e.*, u.full_name as organizer_name,
+                    (SELECT COUNT(*) FROM purchases p WHERE p.event_id = e.id AND p.status = 'completed') as tickets_sold
+                FROM {$this->table} e
+                LEFT JOIN users u ON e.created_by = u.id
+                WHERE 1=1";
+        
+        $params = [];
+        
+        if (!empty($category)) {
+            $sql .= " AND e.category = ?";
+            $params[] = $category;
+        }
+        
+        if (!empty($status)) {
+            $sql .= " AND e.status = ?";
+            $params[] = $status;
+        }
+        
+        $sql .= " ORDER BY 
+                    CASE 
+                        WHEN e.status = 'live' THEN 1
+                        WHEN e.status = 'scheduled' THEN 2
+                        ELSE 3
+                    END,
+                    e.scheduled_start ASC";
+        
+        $stmt = $this->query($sql, $params);
+        return $stmt->fetchAll();
+    }
+    
     // Crear nuevo evento
     public function createEvent($data) {
         // Generar stream key único
