@@ -1,4 +1,4 @@
-    </div><!-- /.main-content -->
+</div><!-- /.main-content -->
     
     <footer style="background: #1a1a1a; padding: 40px 20px; text-align: center; margin-top: 60px;">
         <div style="max-width: 1400px; margin: 0 auto;">
@@ -22,27 +22,27 @@
         // Script para menú móvil
         document.addEventListener('DOMContentLoaded', function() {
             const menuToggle = document.getElementById('menuToggle');
-            const navLinks = document.getElementById('navLinks');
+            const publicNav = document.getElementById('publicNav'); // CORREGIDO: era 'navLinks'
             const navOverlay = document.getElementById('navOverlay');
             
-            if (menuToggle && navLinks && navOverlay) {
+            if (menuToggle && publicNav && navOverlay) {
                 // Abrir/cerrar menú
                 menuToggle.addEventListener('click', function() {
-                    navLinks.classList.toggle('active');
+                    publicNav.classList.toggle('active');
                     navOverlay.classList.toggle('active');
                 });
                 
                 // Cerrar menú al hacer click en overlay
                 navOverlay.addEventListener('click', function() {
-                    navLinks.classList.remove('active');
+                    publicNav.classList.remove('active');
                     navOverlay.classList.remove('active');
                 });
                 
                 // Cerrar menú al hacer click en un link
-                const links = navLinks.querySelectorAll('a');
+                const links = publicNav.querySelectorAll('a');
                 links.forEach(link => {
                     link.addEventListener('click', function() {
-                        navLinks.classList.remove('active');
+                        publicNav.classList.remove('active');
                         navOverlay.classList.remove('active');
                     });
                 });
@@ -50,7 +50,7 @@
                 // Cerrar menú con tecla Escape
                 document.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
-                        navLinks.classList.remove('active');
+                        publicNav.classList.remove('active');
                         navOverlay.classList.remove('active');
                     }
                 });
