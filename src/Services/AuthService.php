@@ -2,315 +2,265 @@
 // src/Services/AuthService.php
 
 require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../config/database.php';
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 class AuthService {
-    private $secret;
-    private $algorithm;
-    private $expiration;
+    private $jwtSecret;
+    private $jwtAlgorithm;
+    private $jwtExpiry;
+    private $db;
     
     public function __construct() {
-        $config = require __DIR__ . '/../../config/streaming.php';
-        $this->secret = $config['tokens']['secret'];
-        $this->algorithm = $config['tokens']['algorithm'];
-        $this->expiration = $config['tokens']['expiration'];
+        // Cargar configuración JWT desde variables de entorno con valores por defecto
+        $this->jwtSecret = getEnvVar('JWT_SECRET', 'tu_clave_secreta_super_segura_cambiar_en_produccion');
+        $this->jwtAlgorithm = getEnvVar('JWT_ALGORITHM', 'HS256');
+        $this->jwtExpiry = (int)getEnvVar('JWT_EXPIRY', 86400); // 24 horas por defecto
+        
+        $this->db = Database::getInstance()->getConnection();
     }
     
-    // Generar JWT token
+    /**
+     * Generar token JWT
+     */
     public function generateToken($userId, $email, $role = 'user') {
         $issuedAt = time();
-        $expirationTime = $issuedAt + $this->expiration;
+        $expire = $issuedAt + $this->jwtExpiry;
         
         $payload = [
-            'iss' => getenv('APP_URL'),
-            'aud' => getenv('APP_URL'),
-            'iat' => $issuedAt,
-            'exp' => $expirationTime,
-            'sub' => $userId,
-            'email' => $email,
-            'role' => $role
+            'iat' => $issuedAt,              // Issued at
+            'exp' => $expire,                // Expiration
+            'iss' => getEnvVar('APP_URL', 'streaming-platform'), // Issuer
+            'data' => [
+                'user_id' => $userId,
+                'email' => $email,
+                'role' => $role
+            ]
         ];
         
-        return JWT::encode($payload, $this->secret, $this->algorithm);
+        try {
+            return JWT::encode($payload, $this->jwtSecret, $this->jwtAlgorithm);
+        } catch (Exception $e) {
+            error_log("Error generating JWT token: " . $e->getMessage());
+            throw new Exception("No se pudo generar el token de autenticación");
+        }
     }
     
-    // Validar JWT token
+    /**
+     * Validar token JWT
+     */
     public function validateToken($token) {
         try {
-            $decoded = JWT::decode($token, new Key($this->secret, $this->algorithm));
-            return [
-                'valid' => true,
-                'data' => (array) $decoded
-            ];
+            $decoded = JWT::decode($token, new Key($this->jwtSecret, $this->jwtAlgorithm));
+            return (array)$decoded->data;
         } catch (Exception $e) {
-            return [
-                'valid' => false,
-                'error' => $e->getMessage()
-            ];
+            error_log("Error validating JWT token: " . $e->getMessage());
+            return false;
         }
     }
     
-    // Generar token de acceso para un evento específico
-    public function generateEventAccessToken($userId, $eventId, $purchaseId) {
-        $accessToken = bin2hex(random_bytes(32));
+    /**
+     * Refrescar token
+     */
+    public function refreshToken($oldToken) {
+        $decoded = $this->validateToken($oldToken);
         
-        // Guardar en Redis para validación rápida
-        $redis = $this->getRedisConnection();
-        $key = "event_access:{$accessToken}";
-        $data = json_encode([
-            'user_id' => $userId,
-            'event_id' => $eventId,
-            'purchase_id' => $purchaseId,
-            'created_at' => time()
-        ]);
-        
-        $redis->setex($key, 86400, $data); // 24 horas
-        
-        return $accessToken;
-    }
-    
-    // Validar token de acceso a evento
-    public function validateEventAccessToken($token) {
-        $redis = $this->getRedisConnection();
-        $key = "event_access:{$token}";
-        $data = $redis->get($key);
-        
-        if (!$data) {
-            return ['valid' => false, 'error' => 'Token inválido o expirado'];
+        if (!$decoded) {
+            throw new Exception("Token inválido");
         }
         
-        return [
-            'valid' => true,
-            'data' => json_decode($data, true)
-        ];
-    }
-    
-    // Iniciar sesión para ver un evento
-    public function startViewingSession($userId, $eventId, $ipAddress, $userAgent) {
-        $db = Database::getInstance()->getConnection();
-        
-        // Verificar si ya hay una sesión activa para este usuario y evento
-        $sql = "SELECT * FROM active_sessions 
-                WHERE user_id = ? AND event_id = ? 
-                AND last_heartbeat > DATE_SUB(NOW(), INTERVAL 5 MINUTE)";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$userId, $eventId]);
-        $existingSession = $stmt->fetch();
-        
-        if ($existingSession) {
-            // Si la IP es diferente, bloquear
-            if ($existingSession['ip_address'] !== $ipAddress) {
-                throw new Exception("Ya existe una sesión activa en otro dispositivo");
-            }
-            
-            // Actualizar sesión existente
-            return $existingSession['session_token'];
-        }
-        
-        // Crear nueva sesión
-        $sessionToken = bin2hex(random_bytes(32));
-        $deviceInfo = $this->extractDeviceInfo($userAgent);
-        
-        $sql = "INSERT INTO active_sessions 
-                (user_id, event_id, session_token, device_info, ip_address, user_agent) 
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                session_token = VALUES(session_token),
-                ip_address = VALUES(ip_address),
-                last_heartbeat = NOW()";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([
-            $userId, 
-            $eventId, 
-            $sessionToken, 
-            json_encode($deviceInfo), 
-            $ipAddress, 
-            $userAgent
-        ]);
-        
-        // Guardar en Redis para validación rápida
-        $this->cacheActiveSession($sessionToken, $userId, $eventId, $ipAddress);
-        
-        return $sessionToken;
-    }
-    
-    // Validar sesión de visualización
-    public function validateViewingSession($sessionToken, $ipAddress) {
-        // Primero intentar desde Redis (más rápido)
-        $redis = $this->getRedisConnection();
-        $key = "session:{$sessionToken}";
-        $cached = $redis->get($key);
-        
-        if ($cached) {
-            $data = json_decode($cached, true);
-            
-            // Validar IP
-            if ($data['ip_address'] !== $ipAddress) {
-                return [
-                    'valid' => false,
-                    'error' => 'Sesión iniciada desde otra IP'
-                ];
-            }
-            
-            return [
-                'valid' => true,
-                'data' => $data
-            ];
-        }
-        
-        // Si no está en cache, buscar en base de datos
-        $db = Database::getInstance()->getConnection();
-        $sql = "SELECT * FROM active_sessions 
-                WHERE session_token = ? 
-                AND last_heartbeat > DATE_SUB(NOW(), INTERVAL 5 MINUTE)";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$sessionToken]);
-        $session = $stmt->fetch();
-        
-        if (!$session) {
-            return ['valid' => false, 'error' => 'Sesión inválida o expirada'];
-        }
-        
-        if ($session['ip_address'] !== $ipAddress) {
-            return ['valid' => false, 'error' => 'Sesión iniciada desde otra IP'];
-        }
-        
-        // Re-cachear
-        $this->cacheActiveSession(
-            $sessionToken, 
-            $session['user_id'], 
-            $session['event_id'], 
-            $session['ip_address']
+        return $this->generateToken(
+            $decoded['user_id'],
+            $decoded['email'],
+            $decoded['role']
         );
-        
-        return [
-            'valid' => true,
-            'data' => $session
-        ];
     }
     
-    // Heartbeat - mantener sesión activa
-    public function heartbeat($sessionToken, $ipAddress) {
-        $validation = $this->validateViewingSession($sessionToken, $ipAddress);
-        
-        if (!$validation['valid']) {
-            return $validation;
-        }
-        
-        // Actualizar timestamp
-        $db = Database::getInstance()->getConnection();
-        $sql = "UPDATE active_sessions 
-                SET last_heartbeat = NOW() 
-                WHERE session_token = ?";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$sessionToken]);
-        
-        // Actualizar cache
-        $redis = $this->getRedisConnection();
-        $key = "session:{$sessionToken}";
-        $redis->expire($key, 300); // 5 minutos
-        
-        return ['valid' => true];
-    }
-    
-    // Terminar sesión
-    public function endViewingSession($sessionToken) {
-        $db = Database::getInstance()->getConnection();
-        $sql = "DELETE FROM active_sessions WHERE session_token = ?";
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$sessionToken]);
-        
-        // Eliminar de cache
-        $redis = $this->getRedisConnection();
-        $redis->del("session:{$sessionToken}");
-        
-        return true;
-    }
-    
-    // Cachear sesión activa en Redis
-    private function cacheActiveSession($sessionToken, $userId, $eventId, $ipAddress) {
-        $redis = $this->getRedisConnection();
-        $key = "session:{$sessionToken}";
-        $data = json_encode([
-            'user_id' => $userId,
-            'event_id' => $eventId,
-            'ip_address' => $ipAddress,
-            'timestamp' => time()
-        ]);
-        
-        $redis->setex($key, 300, $data); // 5 minutos
-    }
-    
-    // Extraer información del dispositivo
-    private function extractDeviceInfo($userAgent) {
-        $device = [
-            'browser' => 'Unknown',
-            'os' => 'Unknown',
-            'device_type' => 'desktop'
-        ];
-        
-        // Detectar navegador
-        if (preg_match('/Firefox\/([0-9.]+)/', $userAgent, $matches)) {
-            $device['browser'] = 'Firefox ' . $matches[1];
-        } elseif (preg_match('/Chrome\/([0-9.]+)/', $userAgent, $matches)) {
-            $device['browser'] = 'Chrome ' . $matches[1];
-        } elseif (preg_match('/Safari\/([0-9.]+)/', $userAgent, $matches)) {
-            $device['browser'] = 'Safari ' . $matches[1];
-        }
-        
-        // Detectar OS
-        if (preg_match('/Windows NT ([0-9.]+)/', $userAgent, $matches)) {
-            $device['os'] = 'Windows ' . $matches[1];
-        } elseif (preg_match('/Mac OS X ([0-9_]+)/', $userAgent, $matches)) {
-            $device['os'] = 'macOS ' . str_replace('_', '.', $matches[1]);
-        } elseif (preg_match('/Android ([0-9.]+)/', $userAgent, $matches)) {
-            $device['os'] = 'Android ' . $matches[1];
-            $device['device_type'] = 'mobile';
-        } elseif (preg_match('/iPhone OS ([0-9_]+)/', $userAgent, $matches)) {
-            $device['os'] = 'iOS ' . str_replace('_', '.', $matches[1]);
-            $device['device_type'] = 'mobile';
-        }
-        
-        return $device;
-    }
-    
-    // Obtener conexión Redis
-    private function getRedisConnection() {
-        static $redis = null;
-        
-        if ($redis === null) {
-            $redis = new Redis();
-            $redis->connect(
-                getenv('REDIS_HOST') ?: 'localhost',
-                getenv('REDIS_PORT') ?: 6379
-            );
+    /**
+     * Verificar si el usuario tiene una sesión activa en otro dispositivo
+     */
+    public function checkActiveSession($userId, $currentToken) {
+        try {
+            $sql = "SELECT session_token, device_info, last_activity 
+                    FROM user_sessions 
+                    WHERE user_id = ? 
+                    AND is_active = 1 
+                    AND expires_at > NOW()
+                    ORDER BY last_activity DESC
+                    LIMIT 1";
             
-            $redisPass = getenv('REDIS_PASSWORD');
-            if ($redisPass) {
-                $redis->auth($redisPass);
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$userId]);
+            $session = $stmt->fetch();
+            
+            if (!$session) {
+                return false; // No hay sesión activa
             }
+            
+            // Si el token es diferente, hay otra sesión activa
+            return $session['session_token'] !== $currentToken ? $session : false;
+            
+        } catch (PDOException $e) {
+            error_log("Error checking active session: " . $e->getMessage());
+            return false;
         }
-        
-        return $redis;
     }
     
-    // Obtener conteo de espectadores activos
-    public function getActiveViewersCount($eventId) {
-        $db = Database::getInstance()->getConnection();
-        $sql = "SELECT COUNT(*) as count FROM active_sessions 
-                WHERE event_id = ? 
-                AND last_heartbeat > DATE_SUB(NOW(), INTERVAL 2 MINUTE)";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$eventId]);
-        $result = $stmt->fetch();
-        
-        return $result['count'];
+    /**
+     * Crear sesión de usuario
+     */
+    public function createSession($userId, $token, $deviceInfo = null) {
+        try {
+            // Invalidar sesiones anteriores del mismo usuario
+            $this->invalidateUserSessions($userId);
+            
+            $sql = "INSERT INTO user_sessions 
+                    (user_id, session_token, device_info, ip_address, user_agent, expires_at, created_at, last_activity) 
+                    VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), NOW(), NOW())";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                $userId,
+                $token,
+                $deviceInfo,
+                $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+                $this->jwtExpiry
+            ]);
+            
+            return $this->db->lastInsertId();
+            
+        } catch (PDOException $e) {
+            error_log("Error creating session: " . $e->getMessage());
+            throw new Exception("No se pudo crear la sesión");
+        }
+    }
+    
+    /**
+     * Actualizar última actividad de la sesión
+     */
+    public function updateSessionActivity($token) {
+        try {
+            $sql = "UPDATE user_sessions 
+                    SET last_activity = NOW() 
+                    WHERE session_token = ? 
+                    AND is_active = 1";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$token]);
+            
+        } catch (PDOException $e) {
+            error_log("Error updating session activity: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Invalidar sesiones de un usuario
+     */
+    public function invalidateUserSessions($userId, $exceptToken = null) {
+        try {
+            if ($exceptToken) {
+                $sql = "UPDATE user_sessions 
+                        SET is_active = 0 
+                        WHERE user_id = ? 
+                        AND session_token != ?";
+                $params = [$userId, $exceptToken];
+            } else {
+                $sql = "UPDATE user_sessions 
+                        SET is_active = 0 
+                        WHERE user_id = ?";
+                $params = [$userId];
+            }
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            
+            return $stmt->rowCount();
+            
+        } catch (PDOException $e) {
+            error_log("Error invalidating sessions: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Cerrar sesión
+     */
+    public function logout($token) {
+        try {
+            $sql = "UPDATE user_sessions 
+                    SET is_active = 0, 
+                        logout_at = NOW() 
+                    WHERE session_token = ?";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$token]);
+            
+            return true;
+            
+        } catch (PDOException $e) {
+            error_log("Error during logout: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Limpiar sesiones expiradas
+     */
+    public function cleanExpiredSessions() {
+        try {
+            $sql = "UPDATE user_sessions 
+                    SET is_active = 0 
+                    WHERE expires_at < NOW() 
+                    AND is_active = 1";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute();
+            
+            return $stmt->rowCount();
+            
+        } catch (PDOException $e) {
+            error_log("Error cleaning expired sessions: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Generar token de "recordarme"
+     */
+    public function generateRememberToken($userId) {
+        return bin2hex(random_bytes(32)) . '-' . $userId . '-' . time();
+    }
+    
+    /**
+     * Validar token de "recordarme"
+     */
+    public function validateRememberToken($token) {
+        try {
+            $parts = explode('-', $token);
+            if (count($parts) !== 3) {
+                return false;
+            }
+            
+            list($hash, $userId, $timestamp) = $parts;
+            
+            // Verificar que no haya expirado (30 días)
+            if (time() - $timestamp > 2592000) {
+                return false;
+            }
+            
+            // Verificar en base de datos
+            $sql = "SELECT id, email, role FROM users WHERE id = ? AND is_active = 1";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$userId]);
+            
+            return $stmt->fetch();
+            
+        } catch (Exception $e) {
+            error_log("Error validating remember token: " . $e->getMessage());
+            return false;
+        }
     }
 }
