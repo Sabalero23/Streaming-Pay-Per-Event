@@ -154,8 +154,8 @@ CREATE TABLE recordings (
 
 -- Insertar usuario admin por defecto
 INSERT INTO users (email, password_hash, full_name, role, email_verified) 
-VALUES ('admin@streaming.com', '$2y$10$.xb576Oc9fKmJGWVIVzDK.XlX589iRFWacS1vetTD2IuF3Zty8ADq', 'Administrador', 'admin', TRUE);
--- Password: admin123
+VALUES ('admin@streaming.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Administrador', 'admin', TRUE);
+-- Password: changeme123
 
 -- Evento de prueba
 INSERT INTO events (title, description, category, price, stream_key, scheduled_start, created_by)

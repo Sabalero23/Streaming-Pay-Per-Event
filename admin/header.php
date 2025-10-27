@@ -2,10 +2,23 @@
 // admin/header.php
 // Header compartido para todo el panel admin
 
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
+// Verificar sesión activa
+if (!isset($_SESSION['user_id'])) {
     header('Location: /public/login.php');
     exit;
 }
+
+// CAMBIO CRÍTICO: Permitir admin, streamer y moderator
+$allowedRoles = ['admin', 'streamer', 'moderator'];
+if (!in_array($_SESSION['user_role'], $allowedRoles)) {
+    header('Location: /public/profile.php');
+    exit;
+}
+
+// Variables útiles
+$isAdmin = $_SESSION['user_role'] === 'admin';
+$isStreamer = $_SESSION['user_role'] === 'streamer';
+$isModerator = $_SESSION['user_role'] === 'moderator';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -31,7 +44,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
         }
         
         .admin-header {
-            background: #2c3e50;
+            background: <?= $isStreamer ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#2c3e50' ?>;
             color: white;
             padding: 15px 20px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -85,7 +98,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
         
         .admin-nav a:hover,
         .admin-nav a.active {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.2);
         }
         
         .user-info {
@@ -93,7 +106,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
             align-items: center;
             gap: 10px;
             padding: 8px 15px;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.15);
             border-radius: 5px;
             font-size: 14px;
         }
@@ -102,12 +115,21 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            background: #667eea;
+            background: rgba(255,255,255,0.3);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
             font-size: 14px;
+            border: 2px solid rgba(255,255,255,0.5);
+        }
+        
+        .user-role-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 12px;
+            font-weight: 600;
         }
         
         .main-content {
@@ -138,7 +160,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
                 width: 80%;
                 max-width: 300px;
                 height: calc(100vh - 60px);
-                background: #2c3e50;
+                background: <?= $isStreamer ? '#667eea' : '#2c3e50' ?>;
                 flex-direction: column;
                 padding: 20px;
                 box-shadow: 2px 0 10px rgba(0,0,0,0.3);
@@ -157,7 +179,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
             }
             
             .user-info {
-                display: none;
+                width: 100%;
+                margin-top: 15px;
+                padding-top: 15px;
+                border-top: 1px solid rgba(255,255,255,0.2);
             }
             
             .container {
@@ -200,8 +225,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
             </button>
             
             <h1>
-                <?= $page_icon ?? '🎛️' ?> 
-                <span><?= $page_title ?? 'Panel Admin' ?></span>
+                <?= $page_icon ?? ($isStreamer ? '🎬' : '🎛️') ?> 
+                <span><?= $page_title ?? ($isStreamer ? 'Panel Streamer' : 'Panel Admin') ?></span>
             </h1>
             
             <nav class="admin-nav" id="adminNav">
@@ -209,31 +234,50 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
                     📊 Dashboard
                 </a>
                 <a href="/admin/events.php" class="<?= basename($_SERVER['PHP_SELF']) === 'events.php' ? 'active' : '' ?>">
-                    🎬 Eventos
+                    🎬 <?= $isStreamer ? 'Mis Eventos' : 'Eventos' ?>
                 </a>
+                
+                <?php if ($isAdmin): ?>
                 <a href="/admin/users.php" class="<?= basename($_SERVER['PHP_SELF']) === 'users.php' ? 'active' : '' ?>">
                     👥 Usuarios
                 </a>
+                <?php endif; ?>
+                
                 <a href="/admin/purchases.php" class="<?= basename($_SERVER['PHP_SELF']) === 'purchases.php' ? 'active' : '' ?>">
-                    💰 Compras
+                    💰 <?= $isStreamer ? 'Mis Ventas' : 'Compras' ?>
                 </a>
+                
+                <?php if ($isAdmin || $isStreamer): ?>
                 <a href="/admin/analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'analytics.php' ? 'active' : '' ?>">
                     📈 Analíticas
                 </a>
+                <?php endif; ?>
+                
                 <a href="/public/" style="border-left: 1px solid rgba(255,255,255,0.2); margin-left: 10px; padding-left: 15px;">
                     🌐 Ver Sitio
                 </a>
-                <a href="/public/logout.php" style="background: rgba(244, 67, 54, 0.2);">
+                <a href="/public/logout.php" style="background: rgba(244, 67, 54, 0.3);">
                     🚪 Salir
                 </a>
-            </nav>
-            
-            <div class="user-info">
-                <div class="user-avatar">
-                    <?= strtoupper(substr($_SESSION['user_name'] ?? 'A', 0, 1)) ?>
+                
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <?= strtoupper(substr($_SESSION['user_name'] ?? 'U', 0, 1)) ?>
+                    </div>
+                    <div>
+                        <div><?= htmlspecialchars($_SESSION['user_name'] ?? 'Usuario') ?></div>
+                        <span class="user-role-badge">
+                            <?php if ($isAdmin): ?>
+                                👑 Admin
+                            <?php elseif ($isStreamer): ?>
+                                🎬 Streamer
+                            <?php elseif ($isModerator): ?>
+                                🛡️ Moderador
+                            <?php endif; ?>
+                        </span>
+                    </div>
                 </div>
-                <span><?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></span>
-            </div>
+            </nav>
         </div>
     </div>
     

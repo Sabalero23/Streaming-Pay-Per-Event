@@ -1,137 +1,84 @@
 <?php
 // config/streaming.php
+// Configuración de streaming RTMP y HLS
+
+// Cargar variables de entorno si no están cargadas
+if (!function_exists('getEnvVar')) {
+    require_once __DIR__ . '/database.php';
+}
 
 return [
-    // Configuración del servidor RTMP
+    // Configuración RTMP
     'rtmp' => [
-        'host' => getenv('RTMP_HOST') ?: 'localhost',
-        'port' => getenv('RTMP_PORT') ?: 1935,
+        'host' => getEnvVar('RTMP_HOST', 'rtmp://streaming.cellcomweb.com.ar/live'),
+        'port' => getEnvVar('RTMP_PORT', 1935),
         'app' => 'live', // Nombre de la aplicación RTMP
-        'url' => function() {
-            $host = getenv('RTMP_HOST') ?: 'localhost';
-            $port = getenv('RTMP_PORT') ?: 1935;
-            return "rtmp://{$host}:{$port}/live";
-        }
+        
+        // URL completa del servidor RTMP
+        'server_url' => getEnvVar('RTMP_HOST', 'rtmp://streaming.cellcomweb.com.ar/live'),
     ],
     
-    // Configuración de HLS
+    // Configuración HLS
     'hls' => [
-        'path' => '/var/www/streaming/hls', // Ruta donde se guardan los segmentos
-        'segment_duration' => 4, // Duración de cada segmento en segundos
-        'playlist_length' => 10, // Número de segmentos en la playlist
-        'base_url' => getenv('HLS_BASE_URL') ?: 'https://tu-dominio.com/hls'
+        'base_url' => getEnvVar('HLS_BASE_URL', 'https://streaming.cellcomweb.com.ar/hls'),
+        'segment_duration' => 6, // Duración de cada segmento en segundos
+        'playlist_length' => 5, // Número de segmentos en el playlist
     ],
     
-    // Configuración de transcodificación
-    'transcoding' => [
+    // Configuración de calidad de video
+    'video_quality' => [
         'profiles' => [
             '1080p' => [
                 'resolution' => '1920x1080',
-                'video_bitrate' => '5000k',
-                'audio_bitrate' => '192k',
-                'fps' => 30
+                'bitrate' => '5000k',
+                'fps' => 30,
             ],
             '720p' => [
                 'resolution' => '1280x720',
-                'video_bitrate' => '3000k',
-                'audio_bitrate' => '128k',
-                'fps' => 30
+                'bitrate' => '3000k',
+                'fps' => 30,
             ],
             '480p' => [
                 'resolution' => '854x480',
-                'video_bitrate' => '1500k',
-                'audio_bitrate' => '128k',
-                'fps' => 30
+                'bitrate' => '1500k',
+                'fps' => 30,
             ],
             '360p' => [
                 'resolution' => '640x360',
-                'video_bitrate' => '800k',
-                'audio_bitrate' => '96k',
-                'fps' => 30
-            ]
+                'bitrate' => '800k',
+                'fps' => 30,
+            ],
         ],
-        'ffmpeg_path' => '/usr/bin/ffmpeg',
-        'preset' => 'veryfast', // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
-        'codec' => 'libx264'
+        
+        // Calidad por defecto
+        'default_profile' => '720p',
+    ],
+    
+    // Configuración de audio
+    'audio' => [
+        'bitrate' => '128k',
+        'sample_rate' => 44100,
+        'channels' => 2,
     ],
     
     // Configuración de grabación
     'recording' => [
         'enabled' => true,
-        'path' => '/var/www/streaming/vod',
+        'path' => getEnvVar('LOG_PATH', '/www/wwwroot/streaming.cellcomweb.com.ar/storage') . '/recordings',
         'format' => 'mp4',
-        'keep_raw' => false // Mantener archivo raw o solo el procesado
+        'auto_delete_days' => 30, // Eliminar grabaciones después de X días
     ],
     
-    // Configuración de watermark
-    'watermark' => [
-        'enabled' => true,
-        'type' => 'text', // 'text' o 'image'
-        'text_template' => '{email} - {ip}', // Variables: {email}, {ip}, {user_id}, {timestamp}
-        'font_size' => 24,
-        'font_color' => 'white',
-        'background_color' => 'black@0.5',
-        'position' => 'top-right', // top-left, top-right, bottom-left, bottom-right
-        'margin' => 10
-    ],
-    
-    // Configuración de CDN
-    'cdn' => [
-        'enabled' => false,
-        'provider' => 'cloudflare', // cloudflare, cloudfront, bunny
-        'url' => getenv('CDN_URL') ?: '',
-        'purge_on_end' => true
-    ],
-    
-    // Límites y restricciones
+    // Límites
     'limits' => [
-        'max_concurrent_viewers' => 1000,
-        'max_stream_duration' => 14400, // 4 horas en segundos
-        'session_timeout' => 300, // 5 minutos sin heartbeat
-        'max_bitrate' => 8000 // kbps
+        'max_viewers_per_stream' => 10000,
+        'max_concurrent_streams' => 100,
+        'max_stream_duration_hours' => 12,
     ],
     
-    // Configuración de tokens de acceso
-    'tokens' => [
-        'algorithm' => 'HS256',
-        'secret' => getenv('JWT_SECRET') ?: 'cambiar-este-secreto-en-produccion',
-        'expiration' => 86400, // 24 horas
-        'refresh_enabled' => true,
-        'refresh_expiration' => 604800 // 7 días
+    // Configuración de CDN (opcional)
+    'cdn' => [
+        'enabled' => !empty(getEnvVar('CDN_URL')),
+        'url' => getEnvVar('CDN_URL', ''),
     ],
-    
-    // Configuración de seguridad
-    'security' => [
-        'enable_ip_validation' => true,
-        'enable_device_validation' => true,
-        'max_failed_heartbeats' => 3,
-        'signed_urls' => true,
-        'signed_url_expiration' => 3600, // 1 hora
-        'hotlink_protection' => true,
-        'allowed_referers' => [
-            'tu-dominio.com',
-            'www.tu-dominio.com'
-        ]
-    ],
-    
-    // YouTube Live como fuente alternativa
-    'youtube' => [
-        'enabled' => true,
-        'api_key' => getenv('YOUTUBE_API_KEY') ?: '',
-        'extract_url_pattern' => '/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/'
-    ],
-    
-    // Notificaciones
-    'notifications' => [
-        'email' => [
-            'enabled' => true,
-            'on_purchase' => true,
-            'on_stream_start' => true,
-            'on_stream_end' => false
-        ],
-        'webhook' => [
-            'enabled' => false,
-            'url' => getenv('WEBHOOK_URL') ?: ''
-        ]
-    ]
 ];

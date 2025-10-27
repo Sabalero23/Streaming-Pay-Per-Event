@@ -10,6 +10,100 @@ class Event extends Model {
         parent::__construct();
     }
     
+    // MÉTODO CORREGIDO: Crear nuevo evento
+    public function createEvent($data) {
+        try {
+            // Generar stream key único
+            $streamKey = $this->generateStreamKey();
+            
+            // Preparar datos con valores por defecto
+            $sql = "INSERT INTO events (
+                title, 
+                description, 
+                category, 
+                thumbnail_url, 
+                price, 
+                currency, 
+                stream_key, 
+                stream_url, 
+                scheduled_start, 
+                enable_recording, 
+                enable_chat, 
+                enable_dvr, 
+                created_by,
+                status,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NOW())";
+            
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([
+                $data['title'],
+                $data['description'] ?? null,
+                $data['category'] ?? null,
+                $data['thumbnail_url'] ?? null,
+                $data['price'],
+                $data['currency'] ?? 'ARS',
+                $streamKey,
+                $data['stream_url'] ?? null,
+                $data['scheduled_start'],
+                $data['enable_recording'] ?? 1,
+                $data['enable_chat'] ?? 1,
+                $data['enable_dvr'] ?? 0,
+                $data['created_by']
+            ]);
+            
+            if (!$result) {
+                throw new Exception("Error al insertar el evento en la base de datos");
+            }
+            
+            $eventId = $this->db->lastInsertId();
+            
+            // Crear configuración de streaming por defecto
+            try {
+                $this->createDefaultStreamSettings($eventId);
+            } catch (Exception $e) {
+                // Si falla la configuración de streaming, continuar igual
+                error_log("Error al crear stream settings: " . $e->getMessage());
+            }
+            
+            return [
+                'id' => $eventId,
+                'stream_key' => $streamKey
+            ];
+        } catch (PDOException $e) {
+            error_log("Error en createEvent: " . $e->getMessage());
+            throw new Exception("Error al crear el evento: " . $e->getMessage());
+        }
+    }
+    
+    // Generar stream key único
+    private function generateStreamKey() {
+        do {
+            $key = 'sk_' . bin2hex(random_bytes(16));
+            $sql = "SELECT COUNT(*) as count FROM {$this->table} WHERE stream_key = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$key]);
+            $result = $stmt->fetch();
+        } while ($result['count'] > 0);
+        
+        return $key;
+    }
+    
+    // Crear configuración de streaming por defecto
+    private function createDefaultStreamSettings($eventId) {
+        try {
+            $sql = "INSERT INTO stream_settings (event_id, video_bitrates, audio_bitrate) 
+                    VALUES (?, ?, ?)";
+            
+            $videoBitrates = json_encode(['1080p', '720p', '480p', '360p']);
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$eventId, $videoBitrates, 128]);
+        } catch (PDOException $e) {
+            // Si la tabla stream_settings no existe, ignorar
+            error_log("Stream settings error (ignorado): " . $e->getMessage());
+        }
+    }
+    
     // MÉTODO AGREGADO: Obtener todos los eventos con filtros
     public function getAllEvents($category = '', $status = '') {
         $sql = "SELECT e.*, u.full_name as organizer_name,
@@ -40,59 +134,6 @@ class Event extends Model {
         
         $stmt = $this->query($sql, $params);
         return $stmt->fetchAll();
-    }
-    
-    // Crear nuevo evento
-    public function createEvent($data) {
-        // Generar stream key único
-        $streamKey = $this->generateStreamKey();
-        
-        $eventData = [
-            'title' => $data['title'],
-            'description' => $data['description'] ?? null,
-            'category' => $data['category'] ?? null,
-            'thumbnail_url' => $data['thumbnail_url'] ?? null,
-            'price' => $data['price'],
-            'currency' => $data['currency'] ?? 'ARS',
-            'stream_key' => $streamKey,
-            'stream_url' => $data['stream_url'] ?? null,
-            'scheduled_start' => $data['scheduled_start'],
-            'enable_recording' => $data['enable_recording'] ?? true,
-            'enable_chat' => $data['enable_chat'] ?? true,
-            'enable_dvr' => $data['enable_dvr'] ?? false,
-            'created_by' => $data['created_by']
-        ];
-        
-        $eventId = $this->create($eventData);
-        
-        // Crear configuración de streaming por defecto
-        $this->createDefaultStreamSettings($eventId);
-        
-        return [
-            'id' => $eventId,
-            'stream_key' => $streamKey
-        ];
-    }
-    
-    // Generar stream key único
-    private function generateStreamKey() {
-        do {
-            $key = 'sk_' . bin2hex(random_bytes(16));
-            $sql = "SELECT COUNT(*) as count FROM {$this->table} WHERE stream_key = ?";
-            $stmt = $this->query($sql, [$key]);
-            $result = $stmt->fetch();
-        } while ($result['count'] > 0);
-        
-        return $key;
-    }
-    
-    // Crear configuración de streaming por defecto
-    private function createDefaultStreamSettings($eventId) {
-        $sql = "INSERT INTO stream_settings (event_id, video_bitrates, audio_bitrate) 
-                VALUES (?, ?, ?)";
-        
-        $videoBitrates = json_encode(['1080p', '720p', '480p', '360p']);
-        $this->query($sql, [$eventId, $videoBitrates, 128]);
     }
     
     // Obtener evento por stream key
