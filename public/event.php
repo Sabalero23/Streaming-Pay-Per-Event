@@ -1,10 +1,20 @@
 <?php
 // public/event.php
-// Página de detalle de evento
+// Página de detalle de evento con integración de pagos MercadoPago SDK v3.x
 session_start();
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/payment.php';
+
+// Cargar autoload de Composer AL INICIO
+require_once __DIR__ . '/../vendor/autoload.php';
+
+// Importar clases de MercadoPago AL INICIO
+use MercadoPago\Client\Preference\PreferenceClient;
+use MercadoPago\MercadoPagoConfig;
+
 $db = Database::getInstance()->getConnection();
+$paymentConfig = PaymentConfig::getInstance();
 
 $event_id = $_GET['id'] ?? 0;
 
@@ -30,6 +40,10 @@ if (isset($_SESSION['user_id'])) {
     $stmt->execute([$_SESSION['user_id'], $event_id]);
     $hasPurchased = $stmt->fetch() !== false;
 }
+
+// Obtener configuración de pago
+$mpConfig = $paymentConfig->getMercadoPago();
+$isPaymentConfigured = $paymentConfig->isMercadoPagoConfigured();
 
 // Procesar compra o acceso gratuito
 $error = '';
@@ -63,8 +77,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
             ]);
             
             $success = "¡Acceso obtenido con éxito! Ya puedes ver el evento.";
+            $hasPurchased = true;
+            
         } else {
-            // Evento de pago - registrar compra pendiente
+            // Evento de pago
+            if (!$isPaymentConfigured) {
+                throw new Exception("El sistema de pagos no está configurado. Contacta al administrador.");
+            }
+            
+            // Registrar compra pendiente
             $stmt = $db->prepare("
                 INSERT INTO purchases 
                 (user_id, event_id, transaction_id, payment_method, amount, currency, status, access_token, purchased_at) 
@@ -79,19 +100,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
                 $access_token
             ]);
             
-            // Redireccionar a pasarela de pago (implementar según tu método)
-            // header('Location: /public/checkout.php?purchase_id=' . $db->lastInsertId());
-            // exit;
-            
-            // Por ahora, marcar como completado (temporal)
             $purchase_id = $db->lastInsertId();
-            $stmt = $db->prepare("UPDATE purchases SET status = 'completed' WHERE id = ?");
-            $stmt->execute([$purchase_id]);
             
-            $success = "¡Compra realizada con éxito! Ya puedes ver el evento.";
+            // Calcular distribución de ganancias
+            $earnings = $paymentConfig->calculateEarnings($event['price'], $event['created_by']);
+            
+            // Configurar MercadoPago con el access token
+            MercadoPagoConfig::setAccessToken($mpConfig['access_token']);
+            
+            // Crear cliente de preferencias
+            $client = new PreferenceClient();
+            
+            // Preparar datos de la preferencia
+            $preferenceData = [
+                'items' => [
+                    [
+                        'id' => (string)$event_id,
+                        'title' => $event['title'],
+                        'description' => substr($event['description'], 0, 200),
+                        'quantity' => 1,
+                        'currency_id' => $event['currency'],
+                        'unit_price' => (float)$event['price']
+                    ]
+                ],
+                'payer' => [
+                    'email' => $_SESSION['user_email'] ?? 'guest@example.com',
+                    'name' => $_SESSION['user_name'] ?? 'Usuario'
+                ],
+                'back_urls' => [
+                    'success' => $mpConfig['success_url'] . '?purchase_id=' . $purchase_id,
+                    'failure' => $mpConfig['failure_url'] . '?purchase_id=' . $purchase_id,
+                    'pending' => $mpConfig['pending_url'] . '?purchase_id=' . $purchase_id
+                ],
+                'auto_return' => 'approved',
+                'external_reference' => $transaction_id,
+                'notification_url' => $mpConfig['notification_url'],
+                'statement_descriptor' => 'STREAMING_EVENT',
+                'metadata' => [
+                    'purchase_id' => $purchase_id,
+                    'event_id' => $event_id,
+                    'user_id' => $_SESSION['user_id'],
+                    'streamer_id' => $event['created_by'],
+                    'streamer_earnings' => $earnings['streamer_earnings'],
+                    'platform_earnings' => $earnings['platform_earnings']
+                ]
+            ];
+            
+            // Crear preferencia
+            $preference = $client->create($preferenceData);
+            
+            // Actualizar purchase con preference_id
+            $stmt = $db->prepare("UPDATE purchases SET transaction_id = ? WHERE id = ?");
+            $stmt->execute([$preference->id, $purchase_id]);
+            
+            // Redireccionar a MercadoPago
+            if ($mpConfig['sandbox']) {
+                $init_point = $preference->sandbox_init_point;
+            } else {
+                $init_point = $preference->init_point;
+            }
+            
+            header('Location: ' . $init_point);
+            exit;
         }
-        
-        $hasPurchased = true;
         
         // Registrar en analytics
         try {
@@ -106,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
                 json_encode([
                     'amount' => $event['price'],
                     'currency' => $event['currency'],
-                    'payment_method' => $isFree ? 'free' : 'pending',
+                    'payment_method' => $isFree ? 'free' : 'mercadopago',
                     'transaction_id' => $transaction_id
                 ]),
                 $_SERVER['REMOTE_ADDR'] ?? 'unknown',
@@ -117,8 +188,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase'])) {
         }
         
     } catch (Exception $e) {
-        error_log("Purchase error: " . $e->getMessage());
-        $error = "Error al procesar la compra. Intenta nuevamente.";
+        error_log("=== PURCHASE ERROR DEBUG ===");
+        error_log("Error Type: " . get_class($e));
+        error_log("Error Message: " . $e->getMessage());
+        error_log("Stack Trace: " . $e->getTraceAsString());
+        
+        // Debug específico para MercadoPago
+        if ($e instanceof \MercadoPago\Exceptions\MPApiException) {
+            error_log("=== MERCADOPAGO API ERROR ===");
+            error_log("Status Code: " . $e->getStatusCode());
+            error_log("API Response: " . json_encode($e->getApiResponse()));
+            
+            // Mostrar error más específico al usuario
+            $statusCode = $e->getStatusCode();
+            if ($statusCode == 401) {
+                $error = "Error de autenticación con MercadoPago. Las credenciales no son válidas.";
+            } elseif ($statusCode == 400) {
+                $apiResponse = $e->getApiResponse();
+                $errorMessage = $apiResponse['message'] ?? 'Datos incorrectos';
+                $error = "Error en los datos: " . $errorMessage;
+            } elseif ($statusCode == 404) {
+                $error = "Recurso no encontrado en MercadoPago.";
+            } else {
+                $error = "Error de MercadoPago (Código: " . $statusCode . ")";
+            }
+        } else {
+            $error = "Error al procesar el pago: " . $e->getMessage();
+        }
+        
+        // Debug de configuración
+        error_log("=== PAYMENT CONFIG DEBUG ===");
+        error_log("Is MP Configured: " . ($isPaymentConfigured ? 'YES' : 'NO'));
+        error_log("Access Token Length: " . strlen($mpConfig['access_token']));
+        error_log("Access Token Preview: " . substr($mpConfig['access_token'], 0, 20) . '...');
+        error_log("Sandbox Mode: " . ($mpConfig['sandbox'] ? 'YES' : 'NO'));
+        error_log("Currency: " . $event['currency']);
+        error_log("Price: " . $event['price']);
+        error_log("Event ID: " . $event_id);
     }
 }
 
@@ -199,6 +305,15 @@ require_once 'styles.php';
     font-size: 14px;
 }
 
+.config-warning {
+    background: #fff3cd;
+    color: #856404;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #ffeaa7;
+}
+
 @media (max-width: 768px) {
     .event-main {
         grid-template-columns: 1fr;
@@ -223,6 +338,13 @@ require_once 'styles.php';
         
         <?php if ($success): ?>
         <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+        <?php endif; ?>
+        
+        <?php if (!$isFree && !$isPaymentConfigured && !$hasPurchased): ?>
+        <div class="config-warning">
+            ⚠️ <strong>Sistema de pagos en configuración.</strong> 
+            Por favor, contacta al administrador para realizar tu compra.
+        </div>
         <?php endif; ?>
 
         <div class="event-hero">
@@ -330,8 +452,8 @@ require_once 'styles.php';
                         </a>
                     <?php elseif ($event['status'] === 'ended'): ?>
                         <?php if ($event['enable_recording']): ?>
-                        <a style="width: 100%; text-align: center;">
-                            🔴 Evento Finalizado
+                        <a href="/public/watch.php?id=<?= $event_id ?>" class="btn btn-primary" style="width: 100%; text-align: center; font-size: 18px; padding: 15px;">
+                            🎥 Ver Grabación
                         </a>
                         <?php else: ?>
                         <p style="text-align: center; color: #999;">
@@ -356,33 +478,42 @@ require_once 'styles.php';
                         <div style="font-size: 48px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">
                             <?= $event['currency'] ?> <?= number_format($event['price'], 2) ?>
                         </div>
-                        <p style="color: #999;">Pago único</p>
+                        <p style="color: #999;">Pago único - Seguro con MercadoPago</p>
                         <?php endif; ?>
                     </div>
 
                     <?php if (isset($_SESSION['user_id'])): ?>
+                        <?php if ($isFree || $isPaymentConfigured): ?>
                         <form method="POST">
                             <button type="submit" name="purchase" class="btn btn-primary" style="width: 100%; font-size: 18px; padding: 15px;">
                                 <?php if ($isFree): ?>
                                 🎁 Obtener Acceso Gratis
                                 <?php else: ?>
-                                🎫 Comprar Ahora
+                                🎫 Comprar con MercadoPago
                                 <?php endif; ?>
                             </button>
                         </form>
+                        <?php else: ?>
+                        <button disabled class="btn" style="width: 100%; font-size: 18px; padding: 15px; opacity: 0.5; cursor: not-allowed;">
+                            ⚠️ Pagos en Configuración
+                        </button>
+                        <?php endif; ?>
+                        
                         <p style="text-align: center; color: #999; font-size: 13px; margin-top: 15px;">
                             <?php if ($isFree): ?>
                             Acceso inmediato sin costo
-                            <?php else: ?>
+                            <?php elseif ($isPaymentConfigured): ?>
                             Pago seguro y acceso inmediato
+                            <?php else: ?>
+                            Contacta al administrador
                             <?php endif; ?>
                         </p>
                     <?php else: ?>
                         <a href="/public/login.php?redirect=<?= urlencode($_SERVER['REQUEST_URI']) ?>" class="btn btn-primary" style="width: 100%; text-align: center; font-size: 18px; padding: 15px;">
                             <?php if ($isFree): ?>
-                            🔓 Inicia Sesión para Acceder
+                            🔐 Inicia Sesión para Acceder
                             <?php else: ?>
-                            🔓 Inicia Sesión para Comprar
+                            🔐 Inicia Sesión para Comprar
                             <?php endif; ?>
                         </a>
                     <?php endif; ?>
@@ -401,6 +532,19 @@ require_once 'styles.php';
                         <?php endif; ?>
                         <li>✅ Soporte técnico</li>
                     </ul>
+                    
+                    <?php if (!$isFree && $isPaymentConfigured): ?>
+                    <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <img src="https://http2.mlstatic.com/frontend-assets/mercadopago-menu/MP_Branding_OffWhite.svg" 
+                                 alt="MercadoPago" style="height: 20px;">
+                            <span style="color: #999; font-size: 12px;">Pago seguro</span>
+                        </div>
+                        <p style="font-size: 11px; color: #666; margin: 0;">
+                            Aceptamos todas las tarjetas y medios de pago
+                        </p>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

@@ -5,18 +5,18 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
-        "ext-pdo": "*",
-        "ext-mysqli": "*",
         "ext-curl": "*",
         "ext-gd": "*",
-        "ext-mbstring": "*",
         "ext-json": "*",
-        "firebase/php-jwt": "^6.10",
-        "mercadopago/dx-php": "^2.6",
-        "stripe/stripe-php": "^13.0",
+        "ext-mbstring": "*",
+        "ext-mysqli": "*",
+        "ext-pdo": "*",
+        "firebase/php-jwt": "^6.11",
+        "mercadopago/dx-php": "^3.7",
+        "monolog/monolog": "^3.5",
         "phpmailer/phpmailer": "^6.9",
         "predis/predis": "^2.2",
-        "monolog/monolog": "^3.5"
+        "stripe/stripe-php": "^13.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.5"

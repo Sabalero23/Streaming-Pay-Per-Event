@@ -283,6 +283,11 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
                     🔍 Sesiones
                     <span class="nav-badge" id="sessionsBadge" style="display: none;">0</span>
                 </a>
+                
+                <!-- Configuración del Sistema (solo para admin) -->
+                <a href="/admin/settings.php" class="<?= basename($_SERVER['PHP_SELF']) === 'settings.php' ? 'active' : '' ?>">
+                    ⚙️ Settings
+                </a>
                 <?php endif; ?>
                 
                 <a href="/public/" style="border-left: 1px solid rgba(255,255,255,0.2); margin-left: 10px; padding-left: 15px;">

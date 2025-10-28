@@ -1,6 +1,6 @@
 <?php
 // public/watch.php
-// Página para ver el evento en vivo - CON SESIÓN ÚNICA
+// Página para ver el evento en vivo - CON SESIÓN ÚNICA Y SOPORTE YOUTUBE
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -114,10 +114,21 @@ $viewers = $stmt->fetch()['count'] ?? 0;
 // Construir URL del stream
 $stream_url = '';
 $stream_available = false;
+$is_youtube_stream = false;
 
 if ($event['status'] === 'live' || ($event['status'] === 'ended' && $event['enable_recording'])) {
-    $stream_url = "https://streaming.cellcomweb.com.ar:8889/live/" . $event['stream_key'] . "/index.m3u8";
-    $stream_available = true;
+    // Verificar si es transmisión de YouTube o OBS
+    if (!empty($event['stream_url'])) {
+        // Transmisión de YouTube
+        $stream_url = $event['stream_url'];
+        $is_youtube_stream = true;
+        $stream_available = true;
+    } else {
+        // Transmisión de OBS (HLS)
+        $stream_url = "https://streaming.cellcomweb.com.ar:8889/live/" . $event['stream_key'] . "/index.m3u8";
+        $is_youtube_stream = false;
+        $stream_available = true;
+    }
 }
 
 require_once 'header.php';
@@ -311,10 +322,23 @@ require_once 'styles.php';
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 </style>
 
-<!-- HLS.js para reproducción HLS -->
+<!-- HLS.js para reproducción HLS (solo cuando NO es YouTube) -->
+<?php if (!$is_youtube_stream): ?>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<?php endif; ?>
 
 <div class="section">
     <div class="watch-container">
@@ -324,7 +348,7 @@ require_once 'styles.php';
         </div>
         <?php elseif ($event['status'] === 'ended'): ?>
         <div class="alert alert-info">
-            🔹 <strong>GRABACIÓN</strong> · Este evento ha finalizado
+            📹 <strong>GRABACIÓN</strong> · Este evento ha finalizado
         </div>
         <?php else: ?>
         <div class="alert alert-warning">
@@ -364,12 +388,433 @@ require_once 'styles.php';
                     
                     <div class="video-player" id="videoPlayer" <?= $session_conflict ? 'style="display:none;"' : '' ?>>
                         <?php if ($stream_available): ?>
-                            <video id="video" controls autoplay muted style="width: 100%; height: 100%;">
-                                Tu navegador no soporta el reproductor de video.
-                            </video>
-                            <div id="streamStatus" class="stream-status" style="display:none;">
-                                Conectando al stream...
-                            </div>
+                            <?php
+// Reemplaza TODA la sección del reproductor de YouTube en watch.php
+// desde la línea ~241 hasta ~290 aproximadamente
+
+if ($is_youtube_stream): ?>
+    <!-- Reproductor de YouTube SIN controles nativos -->
+    <div id="customPlayerContainer" style="position: relative; width: 100%; height: 100%; background: #000;">
+        <iframe 
+            id="youtubePlayer"
+            width="100%" 
+            height="100%" 
+            src="<?= htmlspecialchars($stream_url) ?>?autoplay=1&mute=0&controls=0&enablejsapi=1&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&disablekb=1&playsinline=1&fs=0" 
+            frameborder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">
+        </iframe>
+        
+        <!-- Controles personalizados -->
+        <div id="customControls" style="
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s;
+        ">
+            <!-- Play/Pause -->
+            <button id="playPauseBtn" style="
+                background: none;
+                border: none;
+                color: white;
+                font-size: 24px;
+                cursor: pointer;
+                padding: 5px 10px;
+                display: flex;
+                align-items: center;
+                transition: transform 0.2s;
+            " title="Reproducir/Pausar">
+                ▶️
+            </button>
+            
+            <!-- Barra de progreso -->
+            <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                <span id="currentTime" style="color: white; font-size: 13px; min-width: 45px;">0:00</span>
+                <div id="progressBar" style="
+                    flex: 1;
+                    height: 5px;
+                    background: rgba(255,255,255,0.3);
+                    border-radius: 3px;
+                    cursor: pointer;
+                    position: relative;
+                ">
+                    <div id="progressFilled" style="
+                        height: 100%;
+                        background: #667eea;
+                        border-radius: 3px;
+                        width: 0%;
+                        transition: width 0.1s;
+                    "></div>
+                </div>
+                <span id="duration" style="color: white; font-size: 13px; min-width: 45px;">0:00</span>
+            </div>
+            
+            <!-- Volumen -->
+            <button id="muteBtn" style="
+                background: none;
+                border: none;
+                color: white;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 5px;
+            " title="Silenciar/Activar sonido">
+                🔊
+            </button>
+            
+            <input type="range" id="volumeSlider" min="0" max="100" value="100" style="
+                width: 80px;
+                cursor: pointer;
+            " title="Volumen">
+            
+            <!-- Fullscreen -->
+            <button id="fullscreenBtn" style="
+                background: none;
+                border: none;
+                color: white;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 5px;
+            " title="Pantalla completa">
+                ⛶
+            </button>
+        </div>
+        
+        <!-- Overlay para mostrar controles al hacer hover -->
+        <div id="hoverDetector" style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 99;
+            cursor: pointer;
+        "></div>
+    </div>
+    
+    <style>
+        /* Estilos para controles personalizados */
+        #customPlayerContainer:hover #customControls {
+            opacity: 1;
+        }
+        
+        #customControls button:hover {
+            transform: scale(1.1);
+        }
+        
+        #progressBar:hover {
+            height: 8px;
+        }
+        
+        /* Estilos para el slider de volumen */
+        #volumeSlider {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.3);
+            outline: none;
+            border-radius: 3px;
+            height: 5px;
+        }
+        
+        #volumeSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        
+        #volumeSlider::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        
+        /* Prevenir selección */
+        #customPlayerContainer {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            #customControls {
+                padding: 10px 15px;
+                gap: 10px;
+            }
+            
+            #volumeSlider {
+                display: none;
+            }
+            
+            #currentTime, #duration {
+                font-size: 11px;
+                min-width: 40px;
+            }
+        }
+    </style>
+    
+    <script>
+        // ==========================================
+        // REPRODUCTOR YOUTUBE PERSONALIZADO
+        // ==========================================
+        console.log('[YouTube Custom] Inicializando reproductor personalizado sin controles nativos');
+        
+        let player;
+        let isPlaying = false;
+        let isMuted = false;
+        let currentVolume = 100;
+        let updateInterval;
+        
+        // Cargar YouTube IFrame API
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        
+        // Callback cuando la API está lista
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtubePlayer', {
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+        
+        function onPlayerReady(event) {
+            console.log('[YouTube Custom] ✅ Player listo');
+            console.log('[YouTube Custom] 🔒 Controles nativos DESHABILITADOS');
+            console.log('[YouTube Custom] ✅ Controles personalizados ACTIVOS');
+            
+            // Inicializar controles
+            setupCustomControls();
+            
+            // Actualizar progreso cada segundo
+            updateInterval = setInterval(updateProgress, 1000);
+        }
+        
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.PLAYING) {
+                isPlaying = true;
+                document.getElementById('playPauseBtn').innerHTML = '⏸️';
+            } else if (event.data == YT.PlayerState.PAUSED) {
+                isPlaying = false;
+                document.getElementById('playPauseBtn').innerHTML = '▶️';
+            } else if (event.data == YT.PlayerState.ENDED) {
+                isPlaying = false;
+                document.getElementById('playPauseBtn').innerHTML = '▶️';
+            }
+        }
+        
+        // Configurar controles personalizados
+        function setupCustomControls() {
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const muteBtn = document.getElementById('muteBtn');
+            const volumeSlider = document.getElementById('volumeSlider');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            const progressBar = document.getElementById('progressBar');
+            const hoverDetector = document.getElementById('hoverDetector');
+            
+            // Play/Pause
+            playPauseBtn.addEventListener('click', togglePlayPause);
+            hoverDetector.addEventListener('click', togglePlayPause);
+            
+            // Mute/Unmute
+            muteBtn.addEventListener('click', toggleMute);
+            
+            // Volumen
+            volumeSlider.addEventListener('input', function() {
+                const volume = parseInt(this.value);
+                player.setVolume(volume);
+                currentVolume = volume;
+                updateMuteButton();
+            });
+            
+            // Fullscreen
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+            
+            // Barra de progreso
+            progressBar.addEventListener('click', function(e) {
+                const rect = this.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                const duration = player.getDuration();
+                player.seekTo(duration * percent, true);
+            });
+            
+            // Doble click para fullscreen
+            hoverDetector.addEventListener('dblclick', toggleFullscreen);
+        }
+        
+        // Toggle Play/Pause
+        function togglePlayPause() {
+            if (!player || !player.getPlayerState) return;
+            
+            if (isPlaying) {
+                player.pauseVideo();
+            } else {
+                player.playVideo();
+            }
+        }
+        
+        // Toggle Mute
+        function toggleMute() {
+            if (!player) return;
+            
+            if (isMuted) {
+                player.unMute();
+                player.setVolume(currentVolume);
+                isMuted = false;
+            } else {
+                player.mute();
+                isMuted = true;
+            }
+            updateMuteButton();
+        }
+        
+        // Actualizar botón de mute
+        function updateMuteButton() {
+            const muteBtn = document.getElementById('muteBtn');
+            const volume = player.getVolume();
+            
+            if (isMuted || volume === 0) {
+                muteBtn.innerHTML = '🔇';
+            } else if (volume < 50) {
+                muteBtn.innerHTML = '🔉';
+            } else {
+                muteBtn.innerHTML = '🔊';
+            }
+        }
+        
+        // Toggle Fullscreen
+        function toggleFullscreen() {
+            const container = document.getElementById('customPlayerContainer');
+            
+            if (!document.fullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                } else if (container.msRequestFullscreen) {
+                    container.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        }
+        
+        // Actualizar barra de progreso
+        function updateProgress() {
+            if (!player || !player.getCurrentTime) return;
+            
+            const currentTime = player.getCurrentTime();
+            const duration = player.getDuration();
+            
+            if (duration > 0) {
+                const percent = (currentTime / duration) * 100;
+                document.getElementById('progressFilled').style.width = percent + '%';
+                
+                // Actualizar tiempos
+                document.getElementById('currentTime').textContent = formatTime(currentTime);
+                document.getElementById('duration').textContent = formatTime(duration);
+            }
+        }
+        
+        // Formatear tiempo (segundos a MM:SS)
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) return '0:00';
+            
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+        
+        // Atajos de teclado
+        document.addEventListener('keydown', function(e) {
+            if (!player) return;
+            
+            // Espacio = Play/Pause
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlayPause();
+            }
+            // F = Fullscreen
+            else if (e.code === 'KeyF') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+            // M = Mute
+            else if (e.code === 'KeyM') {
+                e.preventDefault();
+                toggleMute();
+            }
+            // Flechas = Adelantar/Retroceder 5 segundos
+            else if (e.code === 'ArrowLeft') {
+                e.preventDefault();
+                player.seekTo(player.getCurrentTime() - 5, true);
+            }
+            else if (e.code === 'ArrowRight') {
+                e.preventDefault();
+                player.seekTo(player.getCurrentTime() + 5, true);
+            }
+            // Flechas arriba/abajo = Volumen
+            else if (e.code === 'ArrowUp') {
+                e.preventDefault();
+                const newVolume = Math.min(100, player.getVolume() + 10);
+                player.setVolume(newVolume);
+                document.getElementById('volumeSlider').value = newVolume;
+            }
+            else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                const newVolume = Math.max(0, player.getVolume() - 10);
+                player.setVolume(newVolume);
+                document.getElementById('volumeSlider').value = newVolume;
+            }
+        });
+        
+        // Limpiar intervalo al salir
+        window.addEventListener('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+        
+        console.log('[YouTube Custom] 🎮 Controles disponibles:');
+        console.log('  - Espacio: Play/Pause');
+        console.log('  - F: Fullscreen');
+        console.log('  - M: Mute/Unmute');
+        console.log('  - ← →: Retroceder/Adelantar 5s');
+        console.log('  - ↑ ↓: Subir/Bajar volumen');
+    </script>
+<?php else: ?>
+    <!-- Reproductor HLS (OBS) - sin cambios -->
+    <video id="video" controls autoplay muted style="width: 100%; height: 100%;">
+        Tu navegador no soporta el reproductor de video.
+    </video>
+    <div id="streamStatus" class="stream-status" style="display:none;">
+        Conectando al stream...
+    </div>
+<?php endif; ?>
                         <?php else: ?>
                             <div style="text-align: center;">
                                 <div style="font-size: 64px; margin-bottom: 20px;">⏰</div>
@@ -441,6 +886,7 @@ const eventId = <?= $event_id ?>;
 const userId = <?= $_SESSION['user_id'] ?>;
 let sessionBlocked = <?= $session_conflict ? 'true' : 'false' ?>;
 let isSessionActive = true;
+const isYouTubeStream = <?= $is_youtube_stream ? 'true' : 'false' ?>;
 
 // Función para forzar nueva sesión
 function forceNewSession() {
@@ -473,7 +919,34 @@ function forceNewSession() {
 }
 
 <?php if ($stream_available && !$session_conflict): ?>
-// Configurar reproductor HLS
+<?php if ($is_youtube_stream): ?>
+// ==========================================
+// REPRODUCTOR DE YOUTUBE
+// ==========================================
+console.log('[YouTube] Inicializando reproductor de YouTube');
+console.log('[YouTube] URL:', '<?= htmlspecialchars($stream_url) ?>');
+
+// El iframe de YouTube se maneja solo con autoplay
+// Solo necesitamos validar que el iframe esté cargado
+const youtubePlayer = document.getElementById('youtubePlayer');
+
+if (youtubePlayer) {
+    youtubePlayer.addEventListener('load', function() {
+        console.log('[YouTube] Player cargado correctamente');
+    });
+    
+    youtubePlayer.addEventListener('error', function(e) {
+        console.error('[YouTube] Error cargando player:', e);
+    });
+}
+
+// Nota: YouTube maneja su propio buffering y controles
+console.log('[YouTube] ✅ Reproductor de YouTube listo');
+
+<?php else: ?>
+// ==========================================
+// REPRODUCTOR HLS (OBS)
+// ==========================================
 const video = document.getElementById('video');
 const videoSrc = '<?= $stream_url ?>';
 const streamStatus = document.getElementById('streamStatus');
@@ -596,11 +1069,11 @@ function initializePlayer() {
 
 initializePlayer();
 <?php endif; ?>
+<?php endif; ?>
 
 
 // ==========================================
 // SISTEMA DE CHAT EN TIEMPO REAL CON EMOJIS
-// Agregar DESPUÉS del código del reproductor HLS
 // ==========================================
 
 // Variables del chat
@@ -614,11 +1087,11 @@ const emojis = [
     '😀', '😂', '🤣', '😍', '😎', '🤔', '😮', '😱', '😭', '😡',
     '👍', '👎', '👏', '🙌', '🤝', '💪', '🔥', '⭐', '❤️', '💯',
     '🎉', '🎊', '🎁', '🎮', '🎯', '🎪', '🎭', '🎨', '🎬', '🎤',
-    '🏆', '🥇', '🥈', '🥉', '⚽', '🏀', '🎾', '🏐', '🏈', '⚾',
+    '🏆', '🥇', '🥈', '🥉', '⚽', '🏀', '🎾', '🏈', '🏈', '⚾',
     '👀', '👂', '👃', '🤳', '💬', '💭', '🗨️', '🙏', '✌️', '🤘',
     '🎵', '🎶', '🎸', '🎹', '🎺', '🎷', '🥁', '🎻', '🎼', '🎧',
     '☀️', '⭐', '🌟', '✨', '💫', '🌈', '🔴', '🟠', '🟡', '🟢',
-    '🟣', '⚪', '⚫', '🟤', '💥', '💢', '💦', '💨', '🌊', '🔔'
+    '🟣', '⚪', '⚫', '🟤', '💥', '💢', '💦', '💨', '🌊', '🔊'
 ];
 
 // Inicializar chat solo si existe
@@ -722,6 +1195,8 @@ function createEmojiPicker() {
         box-shadow: 0 -4px 20px rgba(102, 126, 234, 0.3);
         z-index: 1000;
         animation: slideUp 0.3s ease;
+        scrollbar-width: thin;
+        scrollbar-color: #667eea #0f0f0f;
     `;
     
     // Agregar emojis al panel
@@ -751,12 +1226,6 @@ function createEmojiPicker() {
         
         emojiPanel.appendChild(emojiSpan);
     });
-    
-    // Scrollbar personalizado
-    emojiPanel.style.cssText += `
-        scrollbar-width: thin;
-        scrollbar-color: #667eea #0f0f0f;
-    `;
     
     inputWrapper.appendChild(emojiPanel);
     
@@ -816,7 +1285,6 @@ function loadChatMessages(initial = false) {
     if (isLoadingMessages) return;
     
     isLoadingMessages = true;
-    const eventId = <?= $event_id ?>;
     
     // URL según si es carga inicial o polling
     const url = initial 
@@ -932,7 +1400,6 @@ function appendChatMessage(msg) {
     }
     
     // El mensaje ya viene con emojis, solo necesitamos mostrarlo
-    // Los emojis se muestran automáticamente ya que son caracteres Unicode
     const messageText = msg.message;
     
     // Construir mensaje
@@ -986,8 +1453,6 @@ function sendChatMessage() {
     chatInput.disabled = true;
     const originalPlaceholder = chatInput.placeholder;
     chatInput.placeholder = 'Enviando...';
-    
-    const eventId = <?= $event_id ?>;
     
     fetch('/api/chat.php', {
         method: 'POST',
@@ -1067,45 +1532,6 @@ function showChatError(message) {
     }, 5000);
 }
 
-// Limpiar intervalo al salir de la página
-window.addEventListener('beforeunload', function() {
-    if (chatPollInterval) {
-        clearInterval(chatPollInterval);
-    }
-});
-
-// Agregar animación CSS
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateY(10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    #emojiPanel::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    #emojiPanel::-webkit-scrollbar-track {
-        background: #0f0f0f;
-    }
-    
-    #emojiPanel::-webkit-scrollbar-thumb {
-        background: #667eea;
-        border-radius: 3px;
-    }
-`;
-document.head.appendChild(style);
-
-console.log('[Chat] Sistema de chat con emojis inicializado correctamente');
-
-
 // Heartbeat mejorado con validación de sesión
 let heartbeatInterval = null;
 
@@ -1156,13 +1582,23 @@ function sendHeartbeat() {
 function handleSessionKicked() {
     isSessionActive = false;
     
-    // Detener video
-    if (hls) {
-        hls.destroy();
-    }
-    if (video) {
-        video.pause();
-        video.src = '';
+    // Detener video según tipo
+    if (isYouTubeStream) {
+        // Detener YouTube (eliminar iframe)
+        const youtubePlayer = document.getElementById('youtubePlayer');
+        if (youtubePlayer) {
+            youtubePlayer.src = '';
+        }
+    } else {
+        // Detener HLS
+        if (typeof hls !== 'undefined' && hls) {
+            hls.destroy();
+        }
+        const video = document.getElementById('video');
+        if (video) {
+            video.pause();
+            video.src = '';
+        }
     }
     
     // Mostrar overlay de sesión bloqueada
@@ -1200,15 +1636,38 @@ if (!sessionBlocked) {
     heartbeatInterval = setInterval(sendHeartbeat, 20000);
 }
 
-// Limpiar al salir
+// Limpiar intervalo al salir de la página
 window.addEventListener('beforeunload', function() {
+    if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+    }
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
     }
-    if (hls) {
+    if (!isYouTubeStream && typeof hls !== 'undefined' && hls) {
         hls.destroy();
     }
 });
+
+// Agregar estilos CSS para el panel de emojis
+const style = document.createElement('style');
+style.textContent = `
+    #emojiPanel::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    #emojiPanel::-webkit-scrollbar-track {
+        background: #0f0f0f;
+    }
+    
+    #emojiPanel::-webkit-scrollbar-thumb {
+        background: #667eea;
+        border-radius: 3px;
+    }
+`;
+document.head.appendChild(style);
+
+console.log('[Chat] Sistema de chat con emojis inicializado correctamente');
 </script>
 
 <?php require_once 'footer.php'; ?>

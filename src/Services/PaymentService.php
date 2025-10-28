@@ -1,13 +1,15 @@
 <?php
 // src/Services/PaymentService.php
+// Compatible con MercadoPago SDK v3.x
 
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../Models/User.php';
 require_once __DIR__ . '/../Models/Event.php';
 
-use MercadoPago\SDK;
-use MercadoPago\Preference;
-use MercadoPago\Item;
+use MercadoPago\Client\Preference\PreferenceClient;
+use MercadoPago\Client\Payment\PaymentClient;
+use MercadoPago\MercadoPagoConfig;
+use MercadoPago\Exceptions\MPApiException;
 
 class PaymentService {
     private $config;
@@ -17,9 +19,9 @@ class PaymentService {
         $this->config = require __DIR__ . '/../../config/payment.php';
         $this->db = Database::getInstance()->getConnection();
         
-        // Configurar MercadoPago SDK
+        // Configurar MercadoPago SDK v3.x
         if ($this->config['default_provider'] === 'mercadopago') {
-            SDK::setAccessToken($this->config['mercadopago']['access_token']);
+            MercadoPagoConfig::setAccessToken($this->config['mercadopago']['access_token']);
         }
     }
     
@@ -44,61 +46,80 @@ class PaymentService {
             throw new Exception("Ya tienes acceso a este evento");
         }
         
-        // Crear item
-        $item = new Item();
-        $item->title = $event['title'];
-        $item->description = substr($event['description'] ?? '', 0, 255);
-        $item->quantity = 1;
-        $item->unit_price = (float) $event['price'];
-        $item->currency_id = $event['currency'];
-        
-        // Crear preferencia
-        $preference = new Preference();
-        $preference->items = [$item];
-        
-        // URLs de retorno
-        $preference->back_urls = [
-            'success' => $this->config['mercadopago']['success_url'],
-            'failure' => $this->config['mercadopago']['failure_url'],
-            'pending' => $this->config['mercadopago']['pending_url']
-        ];
-        $preference->auto_return = 'approved';
-        
-        // Metadata
-        $preference->external_reference = $this->generateTransactionId($userId, $eventId);
-        $preference->metadata = [
-            'user_id' => $userId,
-            'event_id' => $eventId,
-            'email' => $user['email']
-        ];
-        
-        // Información del comprador
-        $preference->payer = [
-            'name' => $user['full_name'],
-            'email' => $user['email'],
-            'phone' => ['number' => $user['phone'] ?? '']
-        ];
-        
-        // Notification URL (webhook)
-        $preference->notification_url = $this->config['mercadopago']['notification_url'];
-        
-        // Guardar preferencia
-        $preference->save();
-        
         // Crear registro de compra pendiente
-        $this->createPendingPurchase(
+        $transactionId = $this->generateTransactionId($userId, $eventId);
+        $purchaseId = $this->createPendingPurchase(
             $userId,
             $eventId,
-            $preference->external_reference,
+            $transactionId,
             $event['price'],
             $event['currency']
         );
         
-        return [
-            'preference_id' => $preference->id,
-            'init_point' => $preference->init_point, // URL de pago desktop
-            'sandbox_init_point' => $preference->sandbox_init_point // URL de pago sandbox
+        // Calcular ganancias
+        $earnings = $this->calculateEarnings($event['price'], $event['created_by']);
+        
+        // Crear cliente de preferencias
+        $client = new PreferenceClient();
+        
+        // Preparar datos de la preferencia
+        $preferenceData = [
+            'items' => [
+                [
+                    'id' => (string)$eventId,
+                    'title' => $event['title'],
+                    'description' => substr($event['description'] ?? '', 0, 255),
+                    'quantity' => 1,
+                    'currency_id' => $event['currency'],
+                    'unit_price' => (float)$event['price']
+                ]
+            ],
+            'payer' => [
+                'name' => $user['full_name'],
+                'email' => $user['email'],
+                'phone' => [
+                    'number' => $user['phone'] ?? ''
+                ]
+            ],
+            'back_urls' => [
+                'success' => $this->config['mercadopago']['success_url'] . '?purchase_id=' . $purchaseId,
+                'failure' => $this->config['mercadopago']['failure_url'] . '?purchase_id=' . $purchaseId,
+                'pending' => $this->config['mercadopago']['pending_url'] . '?purchase_id=' . $purchaseId
+            ],
+            'auto_return' => 'approved',
+            'external_reference' => $transactionId,
+            'notification_url' => $this->config['mercadopago']['notification_url'],
+            'statement_descriptor' => 'STREAMING_EVENT',
+            'metadata' => [
+                'purchase_id' => $purchaseId,
+                'user_id' => $userId,
+                'event_id' => $eventId,
+                'email' => $user['email'],
+                'streamer_id' => $event['created_by'],
+                'streamer_earnings' => $earnings['streamer_earnings'],
+                'platform_earnings' => $earnings['platform_earnings']
+            ]
         ];
+        
+        try {
+            // Crear preferencia
+            $preference = $client->create($preferenceData);
+            
+            // Actualizar purchase con preference_id
+            $sql = "UPDATE purchases SET transaction_id = ? WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$preference->id, $purchaseId]);
+            
+            return [
+                'preference_id' => $preference->id,
+                'init_point' => $preference->init_point,
+                'sandbox_init_point' => $preference->sandbox_init_point
+            ];
+            
+        } catch (MPApiException $e) {
+            error_log("MercadoPago API Error: " . $e->getMessage());
+            throw new Exception("Error al crear preferencia de pago: " . $e->getMessage());
+        }
     }
     
     // Generar ID de transacción único
@@ -108,9 +129,11 @@ class PaymentService {
     
     // Crear compra pendiente
     private function createPendingPurchase($userId, $eventId, $transactionId, $amount, $currency) {
+        $accessToken = bin2hex(random_bytes(32));
+        
         $sql = "INSERT INTO purchases 
-                (user_id, event_id, transaction_id, payment_method, amount, currency, status) 
-                VALUES (?, ?, ?, ?, ?, ?, 'pending')";
+                (user_id, event_id, transaction_id, payment_method, amount, currency, status, access_token, purchased_at) 
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, NOW())";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
@@ -119,7 +142,8 @@ class PaymentService {
             $transactionId,
             'mercadopago',
             $amount,
-            $currency
+            $currency,
+            $accessToken
         ]);
         
         return $this->db->lastInsertId();
@@ -136,7 +160,9 @@ class PaymentService {
         $paymentId = $data['data']['id'];
         
         try {
-            $payment = \MercadoPago\Payment::find_by_id($paymentId);
+            // Crear cliente de pagos
+            $client = new PaymentClient();
+            $payment = $client->get($paymentId);
             
             if (!$payment) {
                 throw new Exception("Pago no encontrado");
@@ -147,7 +173,7 @@ class PaymentService {
             $sql = "SELECT * FROM purchases WHERE transaction_id = ? LIMIT 1";
             $stmt = $this->db->prepare($sql);
             $stmt->execute([$externalReference]);
-            $purchase = $stmt->fetch();
+            $purchase = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$purchase) {
                 throw new Exception("Compra no encontrada");
@@ -156,12 +182,12 @@ class PaymentService {
             // Actualizar estado según el status del pago
             switch ($payment->status) {
                 case 'approved':
-                    $this->approvePurchase($purchase['id'], $paymentId);
+                    $this->approvePurchase($purchase['id'], $paymentId, $payment);
                     break;
                     
                 case 'rejected':
                 case 'cancelled':
-                    $this->rejectPurchase($purchase['id']);
+                    $this->rejectPurchase($purchase['id'], $payment->status_detail);
                     break;
                     
                 case 'refunded':
@@ -170,187 +196,270 @@ class PaymentService {
                     
                 case 'pending':
                 case 'in_process':
-                    // Mantener como pendiente
+                case 'in_mediation':
+                    $this->updatePurchaseStatus($purchase['id'], $payment->status);
                     break;
             }
             
             return ['success' => true, 'status' => $payment->status];
             
+        } catch (MPApiException $e) {
+            error_log("MercadoPago API Error: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
         } catch (Exception $e) {
-            error_log("Error processing MercadoPago webhook: " . $e->getMessage());
+            error_log("Error processing webhook: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
     
     // Aprobar compra
-    private function approvePurchase($purchaseId, $paymentId) {
-        $sql = "SELECT * FROM purchases WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$purchaseId]);
-        $purchase = $stmt->fetch();
-        
-        if (!$purchase) {
-            throw new Exception("Compra no encontrada");
+    private function approvePurchase($purchaseId, $paymentId, $payment) {
+        try {
+            $this->db->beginTransaction();
+            
+            // Actualizar estado de la compra
+            $sql = "UPDATE purchases 
+                    SET status = 'completed', 
+                        payment_id = ?,
+                        payment_status = 'approved',
+                        completed_at = NOW()
+                    WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$paymentId, $purchaseId]);
+            
+            // Obtener información de la compra
+            $sql = "SELECT * FROM purchases WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchaseId]);
+            $purchase = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Obtener información del evento
+            $sql = "SELECT * FROM events WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchase['event_id']]);
+            $event = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Registrar ganancias
+            $earnings = $this->calculateEarnings($purchase['amount'], $event['created_by']);
+            $this->recordEarnings(
+                $purchase['event_id'],
+                $event['created_by'],
+                $purchase['amount'],
+                $earnings['streamer_earnings'],
+                $earnings['platform_earnings'],
+                $purchaseId
+            );
+            
+            // Incrementar contador de ventas del evento
+            $sql = "UPDATE events SET purchases_count = purchases_count + 1 WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchase['event_id']]);
+            
+            // Registrar en analytics
+            $sql = "INSERT INTO analytics 
+                    (event_id, user_id, action, details, ip_address, user_agent, created_at) 
+                    VALUES (?, ?, 'purchase_completed', ?, ?, ?, NOW())";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                $purchase['event_id'],
+                $purchase['user_id'],
+                json_encode([
+                    'payment_id' => $paymentId,
+                    'amount' => $purchase['amount'],
+                    'currency' => $purchase['currency'],
+                    'payment_method' => $payment->payment_method_id ?? 'mercadopago'
+                ]),
+                $_SERVER['REMOTE_ADDR'] ?? 'webhook',
+                $_SERVER['HTTP_USER_AGENT'] ?? 'MercadoPago Webhook'
+            ]);
+            
+            $this->db->commit();
+            
+            // Enviar notificación al usuario (opcional)
+            $this->sendPurchaseConfirmation($purchase['user_id'], $purchase['event_id']);
+            
+            return true;
+            
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            error_log("Error approving purchase: " . $e->getMessage());
+            throw $e;
         }
-        
-        // Generar token de acceso
-        $authService = new AuthService();
-        $accessToken = $authService->generateEventAccessToken(
-            $purchase['user_id'],
-            $purchase['event_id'],
-            $purchaseId
-        );
-        
-        // Actualizar compra
-        $sql = "UPDATE purchases 
-                SET status = 'completed', access_token = ?, expires_at = DATE_ADD(NOW(), INTERVAL 30 DAY)
-                WHERE id = ?";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$accessToken, $purchaseId]);
-        
-        // Registrar en analíticas
-        $this->logPurchaseAnalytics($purchase['user_id'], $purchase['event_id'], 'purchase_completed');
-        
-        // Enviar email de confirmación
-        $this->sendPurchaseConfirmationEmail($purchase['user_id'], $purchase['event_id'], $accessToken);
-        
-        return true;
     }
     
     // Rechazar compra
-    private function rejectPurchase($purchaseId) {
-        $sql = "UPDATE purchases SET status = 'failed' WHERE id = ?";
+    private function rejectPurchase($purchaseId, $statusDetail = null) {
+        $sql = "UPDATE purchases 
+                SET status = 'failed',
+                    payment_status = 'rejected',
+                    status_detail = ?,
+                    updated_at = NOW()
+                WHERE id = ?";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([$purchaseId]);
+        $stmt->execute([$statusDetail, $purchaseId]);
     }
     
     // Reembolsar compra
     private function refundPurchase($purchaseId) {
-        $sql = "UPDATE purchases SET status = 'refunded' WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$purchaseId]);
-        
-        // Revocar acceso
-        $sql = "UPDATE purchases SET access_token = NULL WHERE id = ?";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$purchaseId]);
-    }
-    
-    // Enviar email de confirmación de compra
-    private function sendPurchaseConfirmationEmail($userId, $eventId, $accessToken) {
-        $userModel = new User();
-        $eventModel = new Event();
-        
-        $user = $userModel->findById($userId);
-        $event = $eventModel->findById($eventId);
-        
-        if (!$user || !$event) {
-            return;
+        try {
+            $this->db->beginTransaction();
+            
+            // Obtener información de la compra
+            $sql = "SELECT * FROM purchases WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchaseId]);
+            $purchase = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$purchase) {
+                throw new Exception("Compra no encontrada");
+            }
+            
+            // Actualizar estado de la compra
+            $sql = "UPDATE purchases 
+                    SET status = 'refunded',
+                        payment_status = 'refunded',
+                        refunded_at = NOW()
+                    WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchaseId]);
+            
+            // Revertir ganancias si existen
+            $sql = "UPDATE earnings 
+                    SET status = 'refunded', updated_at = NOW() 
+                    WHERE purchase_id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchaseId]);
+            
+            // Decrementar contador de ventas del evento
+            $sql = "UPDATE events SET purchases_count = GREATEST(0, purchases_count - 1) WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$purchase['event_id']]);
+            
+            $this->db->commit();
+            return true;
+            
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            error_log("Error refunding purchase: " . $e->getMessage());
+            throw $e;
         }
-        
-        $watchUrl = getenv('APP_URL') . "/watch/{$eventId}?token={$accessToken}";
-        $scheduledDate = date('d/m/Y H:i', strtotime($event['scheduled_start']));
-        
-        $subject = "Confirmación de compra - {$event['title']}";
-        $message = "
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
-                    .content { padding: 20px; background: #f9f9f9; }
-                    .button { background: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; 
-                             border-radius: 5px; display: inline-block; margin: 20px 0; }
-                    .info { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #4CAF50; }
-                    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class='container'>
-                    <div class='header'>
-                        <h1>¡Compra Confirmada!</h1>
-                    </div>
-                    <div class='content'>
-                        <p>Hola <strong>{$user['full_name']}</strong>,</p>
-                        <p>Tu compra se ha procesado exitosamente. Ya tienes acceso al evento:</p>
-                        
-                        <div class='info'>
-                            <h3>{$event['title']}</h3>
-                            <p><strong>Fecha programada:</strong> {$scheduledDate}</p>
-                            <p><strong>Precio pagado:</strong> {$event['currency']} {$event['price']}</p>
-                        </div>
-                        
-                        <p>Podrás ver el evento cuando esté en vivo. Te enviaremos un email cuando comience.</p>
-                        
-                        <center>
-                            <a href='{$watchUrl}' class='button'>Acceder al Evento</a>
-                        </center>
-                        
-                        <p><strong>Importante:</strong></p>
-                        <ul>
-                            <li>Este enlace es personal e intransferible</li>
-                            <li>Solo puedes ver desde un dispositivo a la vez</li>
-                            <li>El acceso expira 30 días después de la fecha programada</li>
-                        </ul>
-                    </div>
-                    <div class='footer'>
-                        <p>Este es un correo automático, por favor no responder.</p>
-                        <p>&copy; 2025 Tu Plataforma de Streaming</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-        ";
-        
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "Content-type: text/html; charset=UTF-8\r\n";
-        $headers .= "From: noreply@tu-dominio.com\r\n";
-        
-        mail($user['email'], $subject, $message, $headers);
     }
     
-    // Registrar analítica de compra
-    private function logPurchaseAnalytics($userId, $eventId, $action) {
-        $sql = "INSERT INTO analytics (event_id, user_id, action, ip_address, user_agent) 
-                VALUES (?, ?, ?, ?, ?)";
+    // Actualizar estado de compra
+    private function updatePurchaseStatus($purchaseId, $status) {
+        $sql = "UPDATE purchases 
+                SET payment_status = ?,
+                    updated_at = NOW()
+                WHERE id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$status, $purchaseId]);
+    }
+    
+    // Calcular distribución de ganancias
+    private function calculateEarnings($amount, $streamerId) {
+        // Obtener porcentaje de comisión de la plataforma
+        $platformFee = $this->config['platform_fee_percentage'];
+        
+        $platformEarnings = $amount * ($platformFee / 100);
+        $streamerEarnings = $amount - $platformEarnings;
+        
+        return [
+            'streamer_earnings' => round($streamerEarnings, 2),
+            'platform_earnings' => round($platformEarnings, 2),
+            'platform_fee_percentage' => $platformFee
+        ];
+    }
+    
+    // Registrar ganancias
+    private function recordEarnings($eventId, $streamerId, $totalAmount, $streamerEarnings, $platformEarnings, $purchaseId) {
+        $sql = "INSERT INTO earnings 
+                (event_id, user_id, purchase_id, total_amount, streamer_amount, platform_amount, status, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, 'completed', NOW())";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             $eventId,
-            $userId,
-            $action,
-            $_SERVER['REMOTE_ADDR'] ?? null,
-            $_SERVER['HTTP_USER_AGENT'] ?? null
+            $streamerId,
+            $purchaseId,
+            $totalAmount,
+            $streamerEarnings,
+            $platformEarnings
         ]);
     }
     
-    // Obtener compras del usuario
-    public function getUserPurchases($userId) {
-        $sql = "SELECT p.*, e.title, e.scheduled_start, e.status as event_status
-                FROM purchases p
-                INNER JOIN events e ON p.event_id = e.id
-                WHERE p.user_id = ?
-                ORDER BY p.purchased_at DESC";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$userId]);
-        
-        return $stmt->fetchAll();
+    // Enviar confirmación de compra (método placeholder)
+    private function sendPurchaseConfirmation($userId, $eventId) {
+        // Implementar envío de email/notificación
+        // Puede usar PHPMailer u otro servicio de email
+        try {
+            // TODO: Implementar envío de email
+            error_log("Purchase confirmation should be sent to user $userId for event $eventId");
+        } catch (Exception $e) {
+            error_log("Error sending purchase confirmation: " . $e->getMessage());
+        }
     }
     
-    // Verificar si un usuario puede acceder a un evento
-    public function canAccessEvent($userId, $eventId) {
-        $sql = "SELECT * FROM purchases 
-                WHERE user_id = ? AND event_id = ? 
-                AND status = 'completed'
-                AND (expires_at IS NULL OR expires_at > NOW())
-                LIMIT 1";
+    // Verificar estado de pago por ID
+    public function checkPaymentStatus($paymentId) {
+        try {
+            $client = new PaymentClient();
+            $payment = $client->get($paymentId);
+            
+            return [
+                'id' => $payment->id,
+                'status' => $payment->status,
+                'status_detail' => $payment->status_detail,
+                'amount' => $payment->transaction_amount,
+                'currency' => $payment->currency_id,
+                'payment_method' => $payment->payment_method_id,
+                'date_approved' => $payment->date_approved
+            ];
+            
+        } catch (MPApiException $e) {
+            error_log("MercadoPago API Error: " . $e->getMessage());
+            throw new Exception("Error al verificar estado del pago");
+        }
+    }
+    
+    // Obtener compra por ID
+    public function getPurchaseById($purchaseId) {
+        $sql = "SELECT p.*, e.title as event_title, u.email as user_email 
+                FROM purchases p
+                LEFT JOIN events e ON p.event_id = e.id
+                LEFT JOIN users u ON p.user_id = u.id
+                WHERE p.id = ?";
         
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([$userId, $eventId]);
+        $stmt->execute([$purchaseId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+    
+    // Obtener historial de compras de un usuario
+    public function getUserPurchases($userId, $limit = 50) {
+        $sql = "SELECT p.*, e.title, e.thumbnail_url, e.scheduled_start 
+                FROM purchases p
+                JOIN events e ON p.event_id = e.id
+                WHERE p.user_id = ? 
+                ORDER BY p.purchased_at DESC 
+                LIMIT ?";
         
-        return $stmt->fetch() !== false;
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$userId, $limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    // Obtener ventas de eventos de un streamer
+    public function getStreamerSales($streamerId, $limit = 50) {
+        $sql = "SELECT p.*, e.title, u.email as buyer_email 
+                FROM purchases p
+                JOIN events e ON p.event_id = e.id
+                JOIN users u ON p.user_id = u.id
+                WHERE e.created_by = ? AND p.status = 'completed'
+                ORDER BY p.completed_at DESC 
+                LIMIT ?";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$streamerId, $limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

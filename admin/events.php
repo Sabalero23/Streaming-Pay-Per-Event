@@ -4,7 +4,7 @@
 
 session_start();
 
-// CAMBIO: Permitir admin Y streamer
+// Permitir admin, streamer y moderator
 $allowedRoles = ['admin', 'streamer', 'moderator'];
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], $allowedRoles)) {
     header('Location: /public/login.php');
@@ -25,7 +25,7 @@ $action = $_GET['action'] ?? 'list';
 $error = '';
 $success = '';
 
-// NUEVO: Cambiar estado de transmisión
+// Cambiar estado de transmisión
 if ($action === 'toggle_live' && isset($_GET['id'])) {
     try {
         $eventId = $_GET['id'];
@@ -62,7 +62,7 @@ if ($action === 'toggle_live' && isset($_GET['id'])) {
     }
 }
 
-// NUEVO: Reactivar evento finalizado
+// Reactivar evento finalizado
 if ($action === 'reactivate' && isset($_GET['id'])) {
     try {
         $eventId = $_GET['id'];
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $eventId = $_POST['event_id'];
                 
-                // Verificar permisos: admin puede editar todo, streamer solo sus eventos
+                // Verificar permisos
                 if ($isStreamer) {
                     $event = $eventModel->findById($eventId);
                     if ($event['created_by'] != $userId) {
@@ -127,6 +127,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $eventModel->update($eventId, $data);
+                
+                // Actualizar stream_url si se proporcionó un video de YouTube
+                if (!empty($_POST['youtube_video_id'])) {
+    $youtubeInput = trim($_POST['youtube_video_id']);
+    $youtubeVideoId = '';
+    
+    // Patrón 1: youtube.com/watch?v=ID
+    if (preg_match('/[?&]v=([a-zA-Z0-9_-]+)/', $youtubeInput, $matches)) {
+        $youtubeVideoId = $matches[1];
+    } 
+    // Patrón 2: youtu.be/ID
+    elseif (preg_match('/youtu\.be\/([a-zA-Z0-9_-]+)/', $youtubeInput, $matches)) {
+        $youtubeVideoId = $matches[1];
+    } 
+    // Patrón 3: youtube.com/live/ID (NUEVO - para transmisiones en vivo)
+    elseif (preg_match('/youtube\.com\/live\/([a-zA-Z0-9_-]+)/', $youtubeInput, $matches)) {
+        $youtubeVideoId = $matches[1];
+    }
+    // Patrón 4: youtube.com/embed/ID
+    elseif (preg_match('/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/', $youtubeInput, $matches)) {
+        $youtubeVideoId = $matches[1];
+    }
+    // Patrón 5: Solo el ID (sin URL)
+    elseif (preg_match('/^[a-zA-Z0-9_-]{11}$/', $youtubeInput)) {
+        $youtubeVideoId = $youtubeInput;
+    }
+    
+    if ($youtubeVideoId) {
+        $stmt = $db->prepare("UPDATE events SET stream_url = ? WHERE id = ?");
+        $stmt->execute(['https://www.youtube.com/embed/' . $youtubeVideoId, $eventId]);
+    } else {
+        throw new Exception("Formato de URL de YouTube no válido");
+    }
+} elseif (isset($_POST['clear_youtube'])) {
+    // Limpiar URL de YouTube
+    $stmt = $db->prepare("UPDATE events SET stream_url = NULL WHERE id = ?");
+    $stmt->execute([$eventId]);
+}
+                
                 $success = "Evento actualizado exitosamente";
             }
         } catch (Exception $e) {
@@ -275,6 +314,106 @@ require_once 'styles.php';
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
 }
+
+.stream-type-selector {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.stream-type-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.stream-type-option {
+    position: relative;
+}
+
+.stream-type-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+}
+
+.stream-type-option label {
+    display: block;
+    padding: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+}
+
+.stream-type-option input[type="radio"]:checked + label {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.stream-type-option label:hover {
+    border-color: #667eea;
+    transform: translateY(-2px);
+}
+
+.stream-type-option .icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.stream-type-option .title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stream-type-option .description {
+    font-size: 12px;
+    color: #999;
+}
+
+.stream-config-section {
+    display: none;
+    margin-top: 20px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stream-config-section.active {
+    display: block;
+}
+
+.youtube-preview {
+    margin-top: 15px;
+    padding: 15px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+}
+
+.stream-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.badge-obs {
+    background: #e74c3c;
+    color: white;
+}
+
+.badge-youtube {
+    background: #FF0000;
+    color: white;
+}
 </style>
 
 <?php if ($error): ?>
@@ -315,6 +454,7 @@ require_once 'styles.php';
                     <th>Categoría</th>
                     <th>Fecha</th>
                     <th>Precio</th>
+                    <th>Tipo</th>
                     <th>Estado</th>
                     <th>Control</th>
                     <th>Acciones</th>
@@ -331,6 +471,13 @@ require_once 'styles.php';
                     <td><?= htmlspecialchars($evt['category']) ?></td>
                     <td><?= date('d/m/Y H:i', strtotime($evt['scheduled_start'])) ?></td>
                     <td><?= $evt['currency'] ?> <?= number_format((float)$evt['price'], 2) ?></td>
+                    <td>
+                        <?php if (!empty($evt['stream_url'])): ?>
+                            <span class="stream-type-badge badge-youtube">📺 YOUTUBE</span>
+                        <?php else: ?>
+                            <span class="stream-type-badge badge-obs">🎥 OBS</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php
                         $badges = [
@@ -399,11 +546,11 @@ require_once 'styles.php';
 </div>
 
 <div class="section">
-    <form method="POST" action="?action=<?= $action ?><?= $event ? '&id=' . $event['id'] : '' ?>">
+    <form method="POST" action="?action=<?= $action ?><?= $event ? '&id=' . $event['id'] : '' ?>" id="eventForm">
         <?php if ($event): ?>
         <input type="hidden" name="event_id" value="<?= $event['id'] ?>">
         
-        <!-- NUEVO: Control de transmisión en el formulario de edición -->
+        <!-- Control de transmisión -->
         <?php if ($event['status'] === 'scheduled' || $event['status'] === 'live'): ?>
         <div class="live-controls" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
             <strong>Control de Transmisión:</strong>
@@ -499,62 +646,116 @@ require_once 'styles.php';
         </div>
         
         <?php if ($event): ?>
-        <div class="stream-key-box">
-            <strong>🔑 Stream Key (para OBS):</strong><br>
-            <code><?= $event['stream_key'] ?></code>
-            
-            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
-            
-            <p style="margin-top:10px; color:#666; font-size:13px;">
-                <strong>📡 Configuración para OBS Studio:</strong><br>
+        <!-- Selector de tipo de transmisión -->
+        <div class="stream-type-selector">
+            <h3 style="margin: 0 0 10px 0;">📡 Tipo de Transmisión</h3>
+            <p style="margin: 0 0 15px 0; color: #999; font-size: 14px;">
+                Elige cómo deseas transmitir este evento
             </p>
             
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 10px;">
-                <p style="margin: 5px 0; font-size: 13px;">
-                    <strong>Servidor RTMP:</strong><br>
-                    <code style="background: #2c3e50; color: #3498db; padding: 5px 10px; display: inline-block; border-radius: 4px;">
-                        rtmp://streaming.cellcomweb.com.ar/live
-                    </code>
-                </p>
+            <div class="stream-type-options">
+                <div class="stream-type-option">
+                    <input type="radio" name="stream_type" id="type_obs" value="obs" 
+                           <?= empty($event['stream_url']) ? 'checked' : '' ?>>
+                    <label for="type_obs">
+                        <div class="icon">🎥</div>
+                        <div class="title">OBS Studio</div>
+                        <div class="description">Transmite desde tu computadora con OBS</div>
+                    </label>
+                </div>
                 
-                <p style="margin: 15px 0 5px 0; font-size: 13px;">
-                    <strong>Clave de transmisión:</strong><br>
-                    <code style="background: #2c3e50; color: #e74c3c; padding: 5px 10px; display: inline-block; border-radius: 4px;">
-                        <?= $event['stream_key'] ?>
-                    </code>
-                </p>
+                <div class="stream-type-option">
+                    <input type="radio" name="stream_type" id="type_youtube" value="youtube"
+                           <?= !empty($event['stream_url']) ? 'checked' : '' ?>>
+                    <label for="type_youtube">
+                        <div class="icon">📺</div>
+                        <div class="title">YouTube (Sin Listar)</div>
+                        <div class="description">Usa un video de YouTube existente</div>
+                    </label>
+                </div>
             </div>
             
-            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
+            <!-- Configuración OBS -->
+            <div id="config-obs" class="stream-config-section <?= empty($event['stream_url']) ? 'active' : '' ?>">
+                <h4 style="margin: 0 0 15px 0;">🔑 Configuración OBS</h4>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <p style="margin: 5px 0; font-size: 13px;">
+                        <strong>Servidor RTMP:</strong><br>
+                        <code style="background: #2c3e50; color: #3498db; padding: 5px 10px; display: inline-block; border-radius: 4px;">
+                            rtmp://streaming.cellcomweb.com.ar/live
+                        </code>
+                    </p>
+                    
+                    <p style="margin: 15px 0 5px 0; font-size: 13px;">
+                        <strong>Stream Key:</strong><br>
+                        <code style="background: #2c3e50; color: #e74c3c; padding: 5px 10px; display: inline-block; border-radius: 4px;">
+                            <?= $event['stream_key'] ?>
+                        </code>
+                    </p>
+                </div>
+                
+                <div style="padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                    <strong style="color: #856404;">⚙️ Pasos para OBS:</strong>
+                    <ol style="margin: 10px 0 0 20px; padding: 0; color: #856404; font-size: 13px;">
+                        <li>Abrir OBS Studio</li>
+                        <li>Ir a <strong>Configuración → Emisión</strong></li>
+                        <li>Seleccionar <strong>Servicio: Personalizado</strong></li>
+                        <li>Pegar el servidor RTMP</li>
+                        <li>Pegar la Stream Key</li>
+                        <li>Clic en <strong>Aplicar</strong> y <strong>Aceptar</strong></li>
+                        <li>Clic en <strong>Iniciar transmisión</strong></li>
+                    </ol>
+                </div>
+            </div>
             
-            <p style="margin-top:10px; color:#666; font-size:13px;">
-                <strong>🎬 URL completa (copiar en OBS):</strong><br>
-                <code style="background: #2c3e50; color: #4CAF50; padding: 8px; display: block; margin-top: 5px; border-radius: 4px; word-break: break-all; font-size: 12px;">
-                    rtmp://streaming.cellcomweb.com.ar/live/<?= $event['stream_key'] ?>
-                </code>
-            </p>
-            
-            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e0e0e0;">
-            
-            <p style="margin-top:10px; color:#999; font-size:12px; font-style: italic;">
-                <strong>💡 Para ver el stream en navegador:</strong><br>
-                <code style="background: #f8f9fa; color: #7f8c8d; padding: 5px; display: block; margin-top: 5px; border-radius: 4px; word-break: break-all; font-size: 11px;">
-                    http://streaming.cellcomweb.com.ar:8889/live/<?= $event['stream_key'] ?>/index.m3u8
-                </code>
-            </p>
-            
-            <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                <strong style="color: #856404;">⚠️ Instrucciones OBS:</strong>
-                <ol style="margin: 10px 0 0 20px; padding: 0; color: #856404; font-size: 13px;">
-                    <li>Abrir OBS Studio</li>
-                    <li>Ir a <strong>Configuración → Emisión</strong></li>
-                    <li>Seleccionar <strong>Servicio: Personalizado</strong></li>
-                    <li>Pegar el servidor RTMP arriba</li>
-                    <li>Pegar la clave de transmisión</li>
-                    <li>Clic en <strong>Aplicar</strong> y <strong>Aceptar</strong></li>
-                    <li>Clic en <strong>Iniciar transmisión</strong></li>
-                    <li>Luego hacer clic en <strong>▶️ INICIAR</strong> aquí para activar el evento</li>
-                </ol>
+            <!-- Configuración YouTube -->
+            <div id="config-youtube" class="stream-config-section <?= !empty($event['stream_url']) ? 'active' : '' ?>">
+                <h4 style="margin: 0 0 15px 0;">📺 Configuración YouTube</h4>
+                
+                <div class="form-group">
+                    <label>ID o URL del Video de YouTube *</label>
+                    <input type="text" 
+                           name="youtube_video_id" 
+                           id="youtube_video_id"
+                           placeholder="Ej: dQw4w9WgXcQ o https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                           value="<?php 
+                               if (!empty($event['stream_url'])) {
+                                   // Extraer ID del video desde la URL guardada
+                                   if (preg_match('/embed\/([a-zA-Z0-9_-]+)/', $event['stream_url'], $matches)) {
+                                       echo $matches[1];
+                                   }
+                               }
+                           ?>">
+                    <small style="color: #999; display: block; margin-top: 5px;">
+                        Puedes pegar la URL completa o solo el ID del video de YouTube
+                    </small>
+                </div>
+                
+                <?php if (!empty($event['stream_url'])): ?>
+                <div class="youtube-preview">
+                    <strong>📺 Vista previa del video configurado:</strong>
+                    <p style="margin: 10px 0 5px 0; font-size: 13px; color: #999;">
+                        URL: <code><?= htmlspecialchars($event['stream_url']) ?></code>
+                    </p>
+                    <div style="margin-top: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" name="clear_youtube" value="1">
+                            <span>Eliminar video de YouTube y volver a OBS</span>
+                        </label>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <div style="padding: 12px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px; margin-top: 15px;">
+                    <strong style="color: #1565c0;">💡 Importante:</strong>
+                    <ul style="margin: 10px 0 0 20px; padding: 0; color: #1565c0; font-size: 13px;">
+                        <li>El video debe estar <strong>sin listar</strong> o <strong>público</strong> en YouTube</li>
+                        <li>Videos privados NO funcionarán</li>
+                        <li>Puedes usar transmisiones en vivo de YouTube o videos pregrabados</li>
+                        <li>Para obtener el ID: copia la URL del video y pégala aquí</li>
+                    </ul>
+                </div>
             </div>
         </div>
         <?php endif; ?>
@@ -567,6 +768,67 @@ require_once 'styles.php';
         </div>
     </form>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeObs = document.getElementById('type_obs');
+    const typeYoutube = document.getElementById('type_youtube');
+    const configObs = document.getElementById('config-obs');
+    const configYoutube = document.getElementById('config-youtube');
+    const youtubeInput = document.getElementById('youtube_video_id');
+    const clearYoutube = document.querySelector('input[name="clear_youtube"]');
+    
+    if (typeObs && typeYoutube && configObs && configYoutube) {
+        typeObs.addEventListener('change', function() {
+            if (this.checked) {
+                configObs.classList.add('active');
+                configYoutube.classList.remove('active');
+                if (youtubeInput) youtubeInput.removeAttribute('required');
+            }
+        });
+        
+        typeYoutube.addEventListener('change', function() {
+            if (this.checked) {
+                configYoutube.classList.add('active');
+                configObs.classList.remove('active');
+                if (youtubeInput) youtubeInput.setAttribute('required', 'required');
+            }
+        });
+        
+        // Si se marca "eliminar YouTube", cambiar a OBS
+        if (clearYoutube) {
+            clearYoutube.addEventListener('change', function() {
+                if (this.checked) {
+                    typeObs.checked = true;
+                    configObs.classList.add('active');
+                    configYoutube.classList.remove('active');
+                    if (youtubeInput) {
+                        youtubeInput.value = '';
+                        youtubeInput.removeAttribute('required');
+                    }
+                }
+            });
+        }
+    }
+    
+    // Validación del formulario
+    const form = document.getElementById('eventForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const youtubeSelected = typeYoutube && typeYoutube.checked;
+            const youtubeValue = youtubeInput ? youtubeInput.value.trim() : '';
+            const clearChecked = clearYoutube && clearYoutube.checked;
+            
+            if (youtubeSelected && !youtubeValue && !clearChecked) {
+                e.preventDefault();
+                alert('⚠️ Por favor ingresa el ID o URL del video de YouTube');
+                if (youtubeInput) youtubeInput.focus();
+                return false;
+            }
+        });
+    }
+});
+</script>
 
 <?php endif; ?>
 
