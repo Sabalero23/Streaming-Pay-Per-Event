@@ -1,6 +1,10 @@
 <?php
 // public/watch.php
 // Página para ver el evento en vivo - CON SESIÓN ÚNICA Y SOPORTE YOUTUBE
+
+// ✅ Headers de Permissions Policy (ANTES de cualquier salida)
+// header("Permissions-Policy: unload=()");
+
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -1080,6 +1084,7 @@ initializePlayer();
 let lastMessageId = 0;
 let chatPollInterval = null;
 let isLoadingMessages = false;
+let isSendingMessage = false; // 🔥 NUEVO: Prevenir envíos duplicados
 let emojiPickerVisible = false;
 
 // Lista de emojis populares para streaming
@@ -1112,13 +1117,21 @@ if (chatMessages && chatInput) {
         loadChatMessages(false);
     }, 2000);
     
-    // Enviar mensaje con Enter
+    // 🔥 MEJORADO: Enviar mensaje solo con Enter (no con Shift+Enter)
+if (chatInput) {
     chatInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            sendChatMessage();
+            
+            // 🔥 NUEVO: Solo enviar si no está bloqueado
+            if (!isSendingMessage) {
+                sendChatMessage();
+            } else {
+                console.warn('[Chat] Esperando envío anterior...');
+            }
         }
     });
+}
     
     // Auto-scroll cuando hay overflow
     chatMessages.addEventListener('DOMNodeInserted', function() {
@@ -1278,11 +1291,15 @@ function insertEmoji(emoji) {
 }
 
 /**
- * Cargar mensajes del chat
+ * Cargar mensajes del chat (CON PROTECCIÓN CONTRA RACE CONDITIONS)
  * @param {boolean} initial - Si es la carga inicial
  */
 function loadChatMessages(initial = false) {
-    if (isLoadingMessages) return;
+    // 🔥 MEJORADO: Prevenir múltiples requests simultáneos
+    if (isLoadingMessages) {
+        console.log('[Chat] Ya hay una carga en progreso, saltando...');
+        return;
+    }
     
     isLoadingMessages = true;
     
@@ -1293,23 +1310,18 @@ function loadChatMessages(initial = false) {
     
     fetch(url)
         .then(response => {
-            console.log('[Chat Debug] Status:', response.status);
-            console.log('[Chat Debug] Content-Type:', response.headers.get('content-type'));
-            
-            // Primero obtener el texto sin importar el content-type
-            return response.text().then(text => {
-                console.log('[Chat Debug] Respuesta completa (primeros 500 chars):', text.substring(0, 500));
-                console.log('[Chat Debug] URL llamada:', url);
-                
-                // Verificar content-type
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
+            // Verificar content-type
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                return response.text().then(text => {
                     console.error('[Chat] ❌ Content-Type incorrecto:', contentType);
                     console.error('[Chat] ❌ Respuesta recibida:', text.substring(0, 500));
-                    throw new Error('El servidor no devolvió JSON válido. Ver consola para detalles.');
-                }
-                
-                // Intentar parsear JSON
+                    throw new Error('El servidor no devolvió JSON válido');
+                });
+            }
+            
+            // Parsear JSON
+            return response.text().then(text => {
                 try {
                     const data = JSON.parse(text);
                     if (!response.ok) {
@@ -1359,6 +1371,7 @@ function loadChatMessages(initial = false) {
             }
         })
         .finally(() => {
+            // 🔥 SIEMPRE desbloquear, incluso si hay error
             isLoadingMessages = false;
         });
 }
@@ -1432,7 +1445,7 @@ function appendChatMessage(msg) {
 }
 
 /**
- * Enviar mensaje al chat
+ * Enviar mensaje al chat (CON PROTECCIÓN CONTRA DUPLICADOS)
  */
 function sendChatMessage() {
     if (!chatInput) return;
@@ -1443,11 +1456,20 @@ function sendChatMessage() {
         return;
     }
     
+    // 🔥 NUEVO: Prevenir envíos duplicados
+    if (isSendingMessage) {
+        console.warn('[Chat] Ya hay un mensaje siendo enviado...');
+        return;
+    }
+    
     // Validar longitud
     if (message.length > 500) {
         showChatError('Mensaje muy largo (máximo 500 caracteres)');
         return;
     }
+    
+    // 🔥 BLOQUEAR ENVÍOS
+    isSendingMessage = true;
     
     // Deshabilitar input mientras se envía
     chatInput.disabled = true;
@@ -1488,7 +1510,7 @@ function sendChatMessage() {
             
             // Limpiar input
             chatInput.value = '';
-            console.log('[Chat] Mensaje enviado');
+            console.log('[Chat] ✅ Mensaje enviado');
         }
     })
     .catch(error => {
@@ -1496,6 +1518,9 @@ function sendChatMessage() {
         showChatError(error.message || 'Error al enviar mensaje');
     })
     .finally(() => {
+        // 🔥 DESBLOQUEAR ENVÍOS
+        isSendingMessage = false;
+        
         // Rehabilitar input
         chatInput.disabled = false;
         chatInput.placeholder = originalPlaceholder;
@@ -1636,18 +1661,83 @@ if (!sessionBlocked) {
     heartbeatInterval = setInterval(sendHeartbeat, 20000);
 }
 
-// Limpiar intervalo al salir de la página
-window.addEventListener('beforeunload', function() {
+// ==========================================
+// CLEANUP MODERNO SIN beforeunload NI unload
+// ==========================================
+
+// Función de limpieza
+function cleanupResources() {
+    console.log('[Cleanup] Limpiando recursos...');
+    
+    // Enviar beacon ANTES de limpiar recursos
+    if (navigator.sendBeacon && !sessionBlocked) {
+        const data = new FormData();
+        data.append('event_id', eventId);
+        data.append('user_id', userId);
+        data.append('session_token', sessionToken);
+        data.append('action', 'cleanup');
+        
+        navigator.sendBeacon('/api/heartbeat.php', data);
+    }
+    
+    // Detener polling del chat
     if (chatPollInterval) {
         clearInterval(chatPollInterval);
+        chatPollInterval = null;
     }
+    
+    // Detener heartbeat
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
     }
+    
+    // Destruir HLS si existe
     if (!isYouTubeStream && typeof hls !== 'undefined' && hls) {
-        hls.destroy();
+        try {
+            hls.destroy();
+            console.log('[Cleanup] HLS destruido');
+        } catch (e) {
+            console.error('[Cleanup] Error al destruir HLS:', e);
+        }
+    }
+    
+    // Detener reproductor de YouTube si existe
+    if (isYouTubeStream && typeof player !== 'undefined' && player && player.stopVideo) {
+        try {
+            player.stopVideo();
+            console.log('[Cleanup] YouTube detenido');
+        } catch (e) {
+            console.error('[Cleanup] Error al detener YouTube:', e);
+        }
+    }
+}
+
+// Usar pagehide (cubre cierre de tab/navegador)
+window.addEventListener('pagehide', function(event) {
+    cleanupResources();
+}, { once: true, capture: true });
+
+// Detectar cuando la página se oculta (cambio de tab)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        console.log('[Visibility] Página oculta');
+        // Pausar heartbeat cuando no está visible
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+    } else {
+        console.log('[Visibility] Página visible');
+        // Reanudar heartbeat
+        if (!sessionBlocked && isSessionActive && !heartbeatInterval) {
+            sendHeartbeat();
+            heartbeatInterval = setInterval(sendHeartbeat, 20000);
+        }
     }
 });
+
+console.log('[Cleanup] ✅ Sistema de cleanup moderno inicializado (sin unload)');
 
 // Agregar estilos CSS para el panel de emojis
 const style = document.createElement('style');

@@ -4,7 +4,7 @@
 /* Sections */
 .hero {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 60px 20px;
+    padding: 10px 20px;
     text-align: center;
 }
 
