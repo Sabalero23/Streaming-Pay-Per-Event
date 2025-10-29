@@ -5,18 +5,24 @@ Una plataforma completa de streaming en vivo con pagos por evento, gestión de u
 ## ✨ Características Principales
 
 ### 🎥 Streaming
-- ✅ Transmisión en vivo vía **MediaMTX (RTMP/HLS/WebRTC)**
+- ✅ Transmisión en vivo vía **MediaMTX (RTMP/HLS)**
 - ✅ Soporte para **OBS Studio** y otros encoders RTMP
-- ✅ Integración con **YouTube (videos sin listar)**
+- ✅ Integración con **YouTube** (videos sin listar o transmisiones en vivo)
+- ✅ **Reproductor personalizado** para YouTube sin controles nativos
+- ✅ Reproductor HLS.js para streams OBS con auto-recuperación
 - ✅ Grabación automática (VOD)
 - ✅ Control de sesiones activas en tiempo real
-- ✅ Detección de múltiples dispositivos simultáneos
+- ✅ **Detección de múltiples dispositivos simultáneos**
+- ✅ **Expulsión automática** de sesiones duplicadas
+- ✅ Heartbeat cada 20 segundos para validar sesiones
 
 ### 💰 Sistema de Pagos
-- ✅ Integración con **MercadoPago**
+- ✅ Integración con **MercadoPago SDK v3.x**
 - ✅ Múltiples monedas (ARS, USD, EUR, MXN, BRL)
-- ✅ Acceso gratuito opcional
+- ✅ **Eventos gratuitos** (acceso sin pago)
 - ✅ Sistema de comisiones configurable por streamer
+- ✅ Webhooks para confirmación automática de pagos
+- ✅ Distribución automática de ganancias (streamer/plataforma)
 
 ### 👥 Gestión de Usuarios
 - ✅ **3 roles**: Admin, Streamer, Usuario
