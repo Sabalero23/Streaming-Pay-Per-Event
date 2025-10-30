@@ -538,7 +538,7 @@ Para problemas o consultas:
 - **Documentación**: Revisar este README
 - **Logs**: Siempre revisar logs primero
 - **GitHub Issues**: Reportar bugs
-- **Email**: soporte@tudominio.com
+- **Email**: soporte@cellcomweb.com.ar
 
 ## 📝 Licencia
 
