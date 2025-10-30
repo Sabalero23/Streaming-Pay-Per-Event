@@ -27,6 +27,9 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $page_title ?? 'Panel Admin' ?> - Streaming Platform</title>
     
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
         * {
             margin: 0;
@@ -247,7 +250,15 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
             </button>
             
             <h1>
-                <?= $page_icon ?? ($isStreamer ? '🎬' : '🎛️') ?> 
+                <?php 
+                $icon = $page_icon ?? ($isStreamer ? '🎬' : '🎛️');
+                // Detectar si es una clase de Font Awesome o un emoji
+                if (strpos($icon, 'fa-') !== false || strpos($icon, 'fas ') !== false): 
+                ?>
+                    <i class="<?= $icon ?>"></i>
+                <?php else: ?>
+                    <?= $icon ?>
+                <?php endif; ?>
                 <span><?= $page_title ?? ($isStreamer ? 'Panel Streamer' : 'Panel Admin') ?></span>
             </h1>
             
@@ -280,7 +291,7 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
                 <a href="/admin/sessions_monitor.php" 
                    class="<?= basename($_SERVER['PHP_SELF']) === 'sessions_monitor.php' ? 'active' : '' ?>"
                    id="sessionsLink">
-                    🔍 Sesiones
+                    📡 Sesiones
                     <span class="nav-badge" id="sessionsBadge" style="display: none;">0</span>
                 </a>
                 
@@ -297,23 +308,7 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
                     🚪 Salir
                 </a>
                 
-                <div class="user-info">
-                    <div class="user-avatar">
-                        <?= strtoupper(substr($_SESSION['user_name'] ?? 'U', 0, 1)) ?>
-                    </div>
-                    <div>
-                        <div><?= htmlspecialchars($_SESSION['user_name'] ?? 'Usuario') ?></div>
-                        <span class="user-role-badge">
-                            <?php if ($isAdmin): ?>
-                                👑 Admin
-                            <?php elseif ($isStreamer): ?>
-                                🎬 Streamer
-                            <?php elseif ($isModerator): ?>
-                                🛡️ Moderador
-                            <?php endif; ?>
-                        </span>
-                    </div>
-                </div>
+                
             </nav>
         </div>
     </div>
@@ -322,54 +317,3 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
     
     <div class="main-content">
         <div class="container">
-
-<script>
-// Toggle menú móvil
-const menuToggle = document.getElementById('menuToggle');
-const adminNav = document.getElementById('adminNav');
-const navOverlay = document.getElementById('navOverlay');
-
-if (menuToggle) {
-    menuToggle.addEventListener('click', function() {
-        adminNav.classList.toggle('active');
-        navOverlay.classList.toggle('active');
-    });
-}
-
-if (navOverlay) {
-    navOverlay.addEventListener('click', function() {
-        adminNav.classList.remove('active');
-        navOverlay.classList.remove('active');
-    });
-}
-
-// Cerrar menú al hacer click en un link
-adminNav.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', function() {
-        adminNav.classList.remove('active');
-        navOverlay.classList.remove('active');
-    });
-});
-
-<?php if ($isAdmin): ?>
-// Actualizar badge de sesiones activas (solo para admin)
-function updateSessionsBadge() {
-    fetch('/api/admin/sessions_count.php')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.active_sessions > 0) {
-                const badge = document.getElementById('sessionsBadge');
-                if (badge) {
-                    badge.textContent = data.active_sessions;
-                    badge.style.display = 'block';
-                }
-            }
-        })
-        .catch(error => console.error('Error updating sessions badge:', error));
-}
-
-// Actualizar cada 30 segundos
-updateSessionsBadge();
-setInterval(updateSessionsBadge, 30000);
-<?php endif; ?>
-</script>

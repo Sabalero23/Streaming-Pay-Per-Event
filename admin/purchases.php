@@ -84,40 +84,53 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-icon">📊</div>
+        <div class="stat-icon"><i class="fas fa-chart-bar"></i></div>
         <div class="stat-value"><?= number_format($stats['total']) ?></div>
         <div class="stat-label"><?= $isStreamer ? 'Mis Transacciones' : 'Total Transacciones' ?></div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">💵</div>
+        <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
         <div class="stat-value">$<?= number_format((float)$stats['revenue'], 2) ?></div>
         <div class="stat-label"><?= $isStreamer ? 'Mis Ganancias' : 'Revenue Total' ?></div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">🎫</div>
+        <div class="stat-icon"><i class="fas fa-ticket-alt"></i></div>
         <div class="stat-value">$<?= number_format((float)$stats['avg_ticket'], 2) ?></div>
         <div class="stat-label">Ticket Promedio</div>
     </div>
 </div>
 
 <form class="filter-bar" method="GET">
-    <strong>Filtrar:</strong>
+    <strong><i class="fas fa-filter"></i> Filtrar:</strong>
     <a href="?" class="<?= $filter === '' ? 'active' : '' ?>">Todas</a>
-    <a href="?status=completed" class="<?= $filter === 'completed' ? 'active' : '' ?>">Completadas</a>
-    <a href="?status=pending" class="<?= $filter === 'pending' ? 'active' : '' ?>">Pendientes</a>
-    <a href="?status=failed" class="<?= $filter === 'failed' ? 'active' : '' ?>">Fallidas</a>
-    <a href="?status=refunded" class="<?= $filter === 'refunded' ? 'active' : '' ?>">Reembolsadas</a>
+    <a href="?status=completed" class="<?= $filter === 'completed' ? 'active' : '' ?>">
+        <i class="fas fa-check-circle"></i> Completadas
+    </a>
+    <a href="?status=pending" class="<?= $filter === 'pending' ? 'active' : '' ?>">
+        <i class="fas fa-clock"></i> Pendientes
+    </a>
+    <a href="?status=failed" class="<?= $filter === 'failed' ? 'active' : '' ?>">
+        <i class="fas fa-times-circle"></i> Fallidas
+    </a>
+    <a href="?status=refunded" class="<?= $filter === 'refunded' ? 'active' : '' ?>">
+        <i class="fas fa-undo"></i> Reembolsadas
+    </a>
     
     <div class="search-box">
         <input type="text" name="search" placeholder="Buscar por usuario, email o evento..." value="<?= htmlspecialchars($search) ?>">
     </div>
-    <button type="submit" class="btn">🔍 Buscar</button>
+    <button type="submit" class="btn">
+        <i class="fas fa-search"></i> Buscar
+    </button>
 </form>
 
 <div class="section">
-    <h2>💳 <?= $isStreamer ? 'Mis Ventas' : 'Listado de Compras' ?></h2>
+    <h2><i class="fas fa-credit-card"></i> <?= $isStreamer ? 'Mis Ventas' : 'Listado de Compras' ?></h2>
     <?php if (!empty($purchases)): ?>
     <div class="table-responsive">
         <table>
@@ -137,8 +150,8 @@ require_once 'styles.php';
                 <tr>
                     <td><strong>#<?= $p['id'] ?></strong></td>
                     <td>
-                        <?= htmlspecialchars($p['full_name']) ?><br>
-                        <small style="color:#999;"><?= htmlspecialchars($p['email']) ?></small>
+                        <i class="fas fa-user"></i> <?= htmlspecialchars($p['full_name']) ?><br>
+                        <small style="color:#999;"><i class="fas fa-envelope"></i> <?= htmlspecialchars($p['email']) ?></small>
                     </td>
                     <td><?= htmlspecialchars($p['event_title']) ?></td>
                     <td><?= strtoupper($p['payment_method']) ?></td>
@@ -165,7 +178,7 @@ require_once 'styles.php';
     </div>
     <?php else: ?>
     <div class="empty-state">
-        <div class="empty-state-icon">💰</div>
+        <div class="empty-state-icon"><i class="fas fa-shopping-cart"></i></div>
         <h3><?= $isStreamer ? 'Aún no tienes ventas' : 'No hay compras registradas' ?></h3>
         <p><?= $isStreamer ? 'Las ventas de tus eventos aparecerán aquí' : 'Las transacciones aparecerán aquí cuando los usuarios compren eventos' ?></p>
     </div>

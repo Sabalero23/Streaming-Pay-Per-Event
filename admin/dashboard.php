@@ -153,39 +153,44 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <?php if ($isStreamer): ?>
 <!-- Banner de bienvenida para Streamer -->
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; margin-bottom: 30px; text-align: center;">
-    <h2 style="margin: 0 0 10px 0; font-size: 28px;">👋 ¡Bienvenido, <?= htmlspecialchars($_SESSION['user_name']) ?>!</h2>
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; margin-bottom: 30px; text-align: center; color: white;">
+    <h2 style="margin: 0 0 10px 0; font-size: 28px;">
+        <i class="fas fa-hand-wave"></i> ¡Bienvenido, <?= htmlspecialchars($_SESSION['user_name']) ?>!
+    </h2>
     <p style="margin: 0 0 20px 0; font-size: 16px; opacity: 0.9;">Gestiona tus transmisiones y eventos en vivo</p>
     <a href="/admin/events.php?action=create" class="btn" style="background: white; color: #667eea; font-weight: bold; padding: 12px 30px;">
-        🎬 Crear Nuevo Evento
+        <i class="fas fa-plus-circle"></i> Crear Nuevo Evento
     </a>
 </div>
 <?php endif; ?>
 
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-icon">📊</div>
+        <div class="stat-icon"><i class="fas fa-calendar-alt"></i></div>
         <div class="stat-value"><?= $stats['total_events'] ?></div>
         <div class="stat-label"><?= $isStreamer ? 'Mis Eventos' : 'Total de Eventos' ?></div>
     </div>
     
     <div class="stat-card">
-        <div class="stat-icon">🔴</div>
+        <div class="stat-icon"><i class="fas fa-circle" style="color: #ff0000;"></i></div>
         <div class="stat-value"><?= $stats['live_events'] ?></div>
         <div class="stat-label">En Vivo Ahora</div>
     </div>
     
     <div class="stat-card">
-        <div class="stat-icon">📅</div>
+        <div class="stat-icon"><i class="fas fa-clock"></i></div>
         <div class="stat-value"><?= $stats['scheduled_events'] ?></div>
         <div class="stat-label">Eventos Próximos</div>
     </div>
     
     <?php if ($isAdmin): ?>
     <div class="stat-card">
-        <div class="stat-icon">👥</div>
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
         <div class="stat-value"><?= $stats['total_users'] ?></div>
         <div class="stat-label">Usuarios Registrados</div>
     </div>
@@ -193,27 +198,27 @@ require_once 'styles.php';
     
     <?php if ($isStreamer): ?>
     <div class="stat-card">
-        <div class="stat-icon">👥</div>
+        <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
         <div class="stat-value"><?= $stats['total_viewers'] ?></div>
         <div class="stat-label">Espectadores Únicos</div>
     </div>
     <?php endif; ?>
     
     <div class="stat-card">
-        <div class="stat-icon">👁️</div>
+        <div class="stat-icon"><i class="fas fa-eye"></i></div>
         <div class="stat-value"><?= $stats['active_viewers'] ?></div>
         <div class="stat-label">Espectadores Activos</div>
     </div>
     
     <div class="stat-card">
-        <div class="stat-icon">💰</div>
+        <div class="stat-icon"><i class="fas fa-shopping-cart"></i></div>
         <div class="stat-value"><?= $stats['total_sales'] ?></div>
         <div class="stat-label"><?= $isStreamer ? 'Mis Ventas' : 'Ventas Totales' ?></div>
     </div>
     
     <?php foreach ($revenue as $r): ?>
     <div class="stat-card">
-        <div class="stat-icon">💵</div>
+        <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
         <div class="stat-value"><?= $r['currency'] ?> <?= number_format((float)$r['total'], 2) ?></div>
         <div class="stat-label"><?= $isStreamer ? 'Mis Ganancias' : 'Revenue' ?></div>
     </div>
@@ -222,8 +227,12 @@ require_once 'styles.php';
 
 <div class="section">
     <div class="section-header">
-        <h2><?= $isStreamer ? '🎬 Mis Eventos' : '📺 Eventos Recientes' ?></h2>
-        <a href="/admin/events.php" class="btn btn-primary">Ver Todos</a>
+        <h2>
+            <i class="fas fa-film"></i> <?= $isStreamer ? 'Mis Eventos' : 'Eventos Recientes' ?>
+        </h2>
+        <a href="/admin/events.php" class="btn btn-primary">
+            <i class="fas fa-list"></i> Ver Todos
+        </a>
     </div>
     
     <?php if (!empty($recent_events)): ?>
@@ -266,9 +275,13 @@ require_once 'styles.php';
                         </span>
                     </td>
                     <td>
-                        <a href="/admin/events.php?action=edit&id=<?= $event['id'] ?>" class="btn btn-primary">Editar</a>
+                        <a href="/admin/events.php?action=edit&id=<?= $event['id'] ?>" class="btn btn-primary">
+                            <i class="fas fa-edit"></i> Editar
+                        </a>
                         <?php if ($event['status'] === 'scheduled'): ?>
-                        <a href="/admin/stream.php?event_id=<?= $event['id'] ?>" class="btn btn-success" style="background: #4CAF50;">Iniciar</a>
+                        <a href="/admin/stream.php?event_id=<?= $event['id'] ?>" class="btn btn-success" style="background: #4CAF50;">
+                            <i class="fas fa-play-circle"></i> Iniciar
+                        </a>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -278,11 +291,13 @@ require_once 'styles.php';
     </div>
     <?php else: ?>
     <div class="empty-state">
-        <div class="empty-state-icon">🎬</div>
+        <div class="empty-state-icon"><i class="fas fa-video"></i></div>
         <h3><?= $isStreamer ? 'No tienes eventos creados' : 'No hay eventos registrados' ?></h3>
         <p><?= $isStreamer ? 'Crea tu primer evento para comenzar a transmitir' : 'Crea tu primer evento para comenzar' ?></p>
         <?php if ($isStreamer): ?>
-        <a href="/admin/events.php?action=create" class="btn btn-primary" style="margin-top: 15px;">Crear Mi Primer Evento</a>
+        <a href="/admin/events.php?action=create" class="btn btn-primary" style="margin-top: 15px;">
+            <i class="fas fa-plus-circle"></i> Crear Mi Primer Evento
+        </a>
         <?php endif; ?>
     </div>
     <?php endif; ?>
@@ -290,8 +305,12 @@ require_once 'styles.php';
 
 <div class="section">
     <div class="section-header">
-        <h2><?= $isStreamer ? '💰 Mis Ventas' : '💳 Últimas Compras' ?></h2>
-        <a href="/admin/purchases.php" class="btn btn-primary">Ver Todas</a>
+        <h2>
+            <i class="fas fa-credit-card"></i> <?= $isStreamer ? 'Mis Ventas' : 'Últimas Compras' ?>
+        </h2>
+        <a href="/admin/purchases.php" class="btn btn-primary">
+            <i class="fas fa-list"></i> Ver Todas
+        </a>
     </div>
     
     <?php if (!empty($recent_purchases)): ?>
@@ -311,8 +330,9 @@ require_once 'styles.php';
                 <?php foreach ($recent_purchases as $purchase): ?>
                 <tr>
                     <td>#<?= $purchase['id'] ?></td>
-                    <td><?= htmlspecialchars($purchase['full_name']) ?><br>
-                        <small style="color:#999;"><?= htmlspecialchars($purchase['email']) ?></small>
+                    <td>
+                        <i class="fas fa-user"></i> <?= htmlspecialchars($purchase['full_name']) ?><br>
+                        <small style="color:#999;"><i class="fas fa-envelope"></i> <?= htmlspecialchars($purchase['email']) ?></small>
                     </td>
                     <td><?= htmlspecialchars($purchase['title']) ?></td>
                     <td><strong style="color: #4CAF50;"><?= $purchase['currency'] ?> <?= number_format($purchase['amount'], 2) ?></strong></td>
@@ -329,7 +349,7 @@ require_once 'styles.php';
     </div>
     <?php else: ?>
     <div class="empty-state">
-        <div class="empty-state-icon">💰</div>
+        <div class="empty-state-icon"><i class="fas fa-shopping-cart"></i></div>
         <h3><?= $isStreamer ? 'Aún no tienes ventas' : 'No hay compras registradas' ?></h3>
         <?php if ($isStreamer): ?>
         <p>Crea eventos y comienza a generar ingresos</p>
@@ -341,8 +361,10 @@ require_once 'styles.php';
 <?php if ($isAdmin && !empty($recent_users)): ?>
 <div class="section">
     <div class="section-header">
-        <h2>👥 Usuarios Recientes</h2>
-        <a href="/admin/users.php" class="btn btn-primary">Ver Todos</a>
+        <h2><i class="fas fa-users"></i> Usuarios Recientes</h2>
+        <a href="/admin/users.php" class="btn btn-primary">
+            <i class="fas fa-list"></i> Ver Todos
+        </a>
     </div>
     
     <div class="table-responsive">
@@ -361,8 +383,8 @@ require_once 'styles.php';
                 <?php foreach ($recent_users as $user): ?>
                 <tr>
                     <td>#<?= $user['id'] ?></td>
-                    <td><?= htmlspecialchars($user['full_name']) ?></td>
-                    <td><?= htmlspecialchars($user['email']) ?></td>
+                    <td><i class="fas fa-user"></i> <?= htmlspecialchars($user['full_name']) ?></td>
+                    <td><i class="fas fa-envelope"></i> <?= htmlspecialchars($user['email']) ?></td>
                     <td>
                         <span class="badge <?= $user['role'] === 'admin' ? 'badge-danger' : ($user['role'] === 'streamer' ? 'badge-info' : 'badge-secondary') ?>">
                             <?= strtoupper($user['role']) ?>
@@ -385,27 +407,45 @@ require_once 'styles.php';
 <?php if ($isStreamer): ?>
 <!-- Sección de ayuda para streamers -->
 <div class="section" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 12px; padding: 30px;">
-    <h2 style="margin-bottom: 20px;">📚 Guía Rápida para Streamers</h2>
+    <h2 style="margin-bottom: 20px;">
+        <i class="fas fa-book-open"></i> Guía Rápida para Streamers
+    </h2>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-        <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px;">
-            <h3 style="margin-bottom: 10px;">1️⃣ Crea un Evento</h3>
-            <p style="color: #ccc; margin-bottom: 10px;">Define título, fecha, precio y detalles de tu transmisión</p>
-            <a href="/admin/events.php?action=create" class="btn btn-primary">Crear Evento</a>
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 10px; color: #667eea;">
+                <i class="fas fa-plus-circle"></i> 1. Crea un Evento
+            </h3>
+            <p style="color: #666; margin-bottom: 15px;">Define título, fecha, precio y detalles de tu transmisión</p>
+            <a href="/admin/events.php?action=create" class="btn btn-primary">
+                <i class="fas fa-film"></i> Crear Evento
+            </a>
         </div>
-        <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px;">
-            <h3 style="margin-bottom: 10px;">2️⃣ Configura OBS</h3>
-            <p style="color: #ccc; margin-bottom: 10px;">Obtén tu Stream Key y configura tu software de streaming</p>
-            <a href="/admin/stream-settings.php" class="btn btn-primary">Ver Configuración</a>
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 10px; color: #667eea;">
+                <i class="fas fa-cog"></i> 2. Configura OBS
+            </h3>
+            <p style="color: #666; margin-bottom: 15px;">Obtén tu Stream Key y configura tu software de streaming</p>
+            <a href="/admin/stream-settings.php" class="btn btn-primary">
+                <i class="fas fa-wrench"></i> Ver Configuración
+            </a>
         </div>
-        <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px;">
-            <h3 style="margin-bottom: 10px;">3️⃣ Inicia Stream</h3>
-            <p style="color: #ccc; margin-bottom: 10px;">Comienza tu transmisión cuando el evento esté programado</p>
-            <a href="/admin/events.php" class="btn btn-primary">Mis Eventos</a>
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 10px; color: #667eea;">
+                <i class="fas fa-broadcast-tower"></i> 3. Inicia Stream
+            </h3>
+            <p style="color: #666; margin-bottom: 15px;">Comienza tu transmisión cuando el evento esté programado</p>
+            <a href="/admin/events.php" class="btn btn-primary">
+                <i class="fas fa-list"></i> Mis Eventos
+            </a>
         </div>
-        <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px;">
-            <h3 style="margin-bottom: 10px;">4️⃣ Revisa Ganancias</h3>
-            <p style="color: #ccc; margin-bottom: 10px;">Monitorea tus ventas y estadísticas en tiempo real</p>
-            <a href="/admin/purchases.php" class="btn btn-primary">Ver Ventas</a>
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h3 style="margin-bottom: 10px; color: #667eea;">
+                <i class="fas fa-chart-line"></i> 4. Revisa Ganancias
+            </h3>
+            <p style="color: #666; margin-bottom: 15px;">Monitorea tus ventas y estadísticas en tiempo real</p>
+            <a href="/admin/purchases.php" class="btn btn-primary">
+                <i class="fas fa-dollar-sign"></i> Ver Ventas
+            </a>
         </div>
     </div>
 </div>

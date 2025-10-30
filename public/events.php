@@ -19,7 +19,7 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
-<div class="hero" style="padding: 40px 20px;">
+<div class="hero" style="padding: 10px 20px;">
     <div class="container">
         <h1>Todos los Eventos</h1>
         <p>Encuentra y disfruta de los mejores eventos en vivo</p>

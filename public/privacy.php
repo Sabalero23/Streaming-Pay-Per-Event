@@ -2,10 +2,19 @@
 // public/privacy.php
 session_start();
 
+// IMPORTANTE: Incluir Database ANTES de header.php
+require_once __DIR__ . '/../config/database.php';
+
 $page_title = "Política de Privacidad";
 
 require_once 'header.php';
 require_once 'styles.php';
+
+// Cargar configuración para datos dinámicos
+require_once __DIR__ . '/../src/Helpers/SiteConfig.php';
+$contact_email = SiteConfig::get('contact_email', 'info@eventix.com.ar');
+$site_name = SiteConfig::siteName();
+$company_name = SiteConfig::get('company_name', 'Eventix');
 ?>
 
 <style>
@@ -328,7 +337,7 @@ require_once 'styles.php';
             <li>Deshabilitar cookies no esenciales</li>
         </ul>
 
-        <p><strong>Para ejercer estos derechos, contáctanos en:</strong> eventix@cellcomweb.com.ar</p>
+        <p><strong>Para ejercer estos derechos, contáctanos en:</strong> <?= htmlspecialchars($contact_email) ?></p>
 
         <h2>8. Cookies y Tecnologías de Seguimiento</h2>
         <p>Utilizamos cookies para:</p>
@@ -367,8 +376,7 @@ require_once 'styles.php';
         <h2>13. Contacto y Consultas</h2>
         <p>Para preguntas sobre esta política o el tratamiento de tus datos:</p>
         <ul>
-            <li><strong>Email:</strong> privacidad@cellcomweb.com.ar</li>
-            <li><strong>Email de soporte:</strong> eventix@cellcomweb.com.ar</li>
+            <li><strong>Email:</strong> <?= htmlspecialchars($contact_email) ?></li>
             <li><strong>Formulario:</strong> <a href="/public/contact.php">Página de Contacto</a></li>
         </ul>
 
@@ -382,7 +390,7 @@ require_once 'styles.php';
 
     <div class="legal-footer">
         <p><strong>Última actualización:</strong> <?= date('d/m/Y') ?></p>
-        <p>Desarrollado por <a href="https://www.cellcomweb.com.ar" target="_blank" rel="noopener">Cellcom Technology</a></p>
+        <p><?= htmlspecialchars($company_name) ?></p>
         <p>
             <a href="/public/terms.php">Términos y Condiciones</a> | 
             <a href="/public/contact.php">Contacto</a>

@@ -5,7 +5,7 @@
 session_start();
 
 $page_title = "Usuarios";
-$page_icon = "👥";
+$page_icon = "fas fa-users";
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header('Location: /public/login.php');
@@ -206,6 +206,9 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <style>
 .user-avatar {
     width: 40px;
@@ -275,27 +278,27 @@ require_once 'styles.php';
 
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-icon">👥</div>
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
         <div class="stat-value"><?= $stats['total'] ?></div>
         <div class="stat-label">Total Usuarios</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">✅</div>
+        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
         <div class="stat-value"><?= $stats['active'] ?></div>
         <div class="stat-label">Usuarios Activos</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">🔑</div>
+        <div class="stat-icon"><i class="fas fa-user-shield"></i></div>
         <div class="stat-value"><?= $stats['admins'] ?></div>
         <div class="stat-label">Administradores</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">🎬</div>
+        <div class="stat-icon"><i class="fas fa-video"></i></div>
         <div class="stat-value"><?= $stats['streamers'] ?></div>
         <div class="stat-label">Streamers</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon">🆕</div>
+        <div class="stat-icon"><i class="fas fa-user-plus"></i></div>
         <div class="stat-value"><?= $stats['new_month'] ?></div>
         <div class="stat-label">Nuevos (30 días)</div>
     </div>
@@ -303,11 +306,13 @@ require_once 'styles.php';
 
 <div class="section-header">
     <h2>Gestión de Usuarios</h2>
-    <a href="?action=create" class="btn btn-primary">➕ Crear Usuario</a>
+    <a href="?action=create" class="btn btn-primary">
+        <i class="fas fa-plus-circle"></i> Crear Usuario
+    </a>
 </div>
 
 <form method="GET" class="filter-bar">
-    <strong>Filtrar:</strong>
+    <strong><i class="fas fa-filter"></i> Filtrar:</strong>
     <a href="?" class="<?= $filter === '' ? 'active' : '' ?>">Todos</a>
     <a href="?filter=admin" class="<?= $filter === 'admin' ? 'active' : '' ?>">Admins</a>
     <a href="?filter=streamer" class="<?= $filter === 'streamer' ? 'active' : '' ?>">Streamers</a>
@@ -317,7 +322,9 @@ require_once 'styles.php';
     <div class="search-box">
         <input type="text" name="search" placeholder="Buscar por nombre o email..." value="<?= htmlspecialchars($search) ?>">
     </div>
-    <button type="submit" class="btn btn-primary">🔍 Buscar</button>
+    <button type="submit" class="btn btn-primary">
+        <i class="fas fa-search"></i> Buscar
+    </button>
 </form>
 
 <div class="section">
@@ -360,9 +367,13 @@ require_once 'styles.php';
                     <td><?= date('d/m/Y', strtotime($u['created_at'])) ?></td>
                     <td>
                         <div class="quick-actions">
-                            <a href="?action=edit&id=<?= $u['id'] ?>" class="btn btn-primary" style="padding:4px 10px; font-size:12px;">✏️ Editar</a>
+                            <a href="?action=edit&id=<?= $u['id'] ?>" class="btn btn-primary" style="padding:4px 10px; font-size:12px;">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
                             <?php if ($u['id'] != $_SESSION['user_id']): ?>
-                            <a href="?action=delete&id=<?= $u['id'] ?>" class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="return confirm('¿Eliminar este usuario?')">🗑️</a>
+                            <a href="?action=delete&id=<?= $u['id'] ?>" class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="return confirm('¿Eliminar este usuario?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
                             <?php endif; ?>
                         </div>
                     </td>
@@ -376,8 +387,12 @@ require_once 'styles.php';
 <?php elseif ($action === 'create' || $action === 'edit'): ?>
 
 <div class="section-header">
-    <h2><?= $action === 'create' ? '➕ Crear Nuevo Usuario' : '✏️ Editar Usuario' ?></h2>
-    <a href="?" class="btn btn-primary">← Volver</a>
+    <h2>
+        <?= $action === 'create' ? '<i class="fas fa-user-plus"></i> Crear Nuevo Usuario' : '<i class="fas fa-user-edit"></i> Editar Usuario' ?>
+    </h2>
+    <a href="?" class="btn btn-primary">
+        <i class="fas fa-arrow-left"></i> Volver
+    </a>
 </div>
 
 <div class="section">
@@ -414,7 +429,7 @@ require_once 'styles.php';
                         🎬 Streamer (Crea y transmite eventos)
                     </option>
                     <option value="admin" <?= ($user['role'] ?? '') === 'admin' ? 'selected' : '' ?>>
-                        🔑 Administrador
+                        👑 Administrador
                     </option>
                 </select>
                 <div class="password-hint">
@@ -447,7 +462,7 @@ require_once 'styles.php';
         <hr style="margin: 30px 0; border: none; border-top: 2px solid #f0f0f0;">
         
         <h3 style="margin-bottom: 20px; color: #2c3e50;">
-            <?= $action === 'create' ? '🔒 Contraseña' : '🔒 Cambiar Contraseña' ?>
+            <i class="fas fa-key"></i> <?= $action === 'create' ? 'Contraseña' : 'Cambiar Contraseña' ?>
         </h3>
         
         <div class="form-row">
@@ -464,9 +479,11 @@ require_once 'styles.php';
         
         <div style="margin-top: 30px; display: flex; gap: 10px;">
             <button type="submit" class="btn btn-success">
-                <?= $action === 'create' ? '✅ Crear Usuario' : '💾 Guardar Cambios' ?>
+                <?= $action === 'create' ? '<i class="fas fa-check"></i> Crear Usuario' : '<i class="fas fa-save"></i> Guardar Cambios' ?>
             </button>
-            <a href="?" class="btn">Cancelar</a>
+            <a href="?" class="btn">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
         </div>
     </form>
 </div>

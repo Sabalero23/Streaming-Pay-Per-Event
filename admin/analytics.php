@@ -266,7 +266,10 @@ $page_icon = "📊";
 
 require_once 'header.php';
 require_once 'styles.php';
+
 ?>
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <style>
 .commission-info {
@@ -407,44 +410,45 @@ require_once 'styles.php';
 
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-icon">🎬</div>
-        <div class="stat-value"><?= number_format($metrics['total_events']) ?></div>
-        <div class="stat-label"><?= $isStreamer ? 'Mis Eventos' : 'Eventos Creados' ?></div>
-    </div>
-    
-    <?php if ($isAdmin): ?>
-    <div class="stat-card">
-        <div class="stat-icon">👥</div>
-        <div class="stat-value"><?= number_format($metrics['total_users']) ?></div>
-        <div class="stat-label">Usuarios Totales</div>
-    </div>
-    <?php endif; ?>
-    
-    <div class="stat-card">
-        <div class="stat-icon">💳</div>
-        <div class="stat-value"><?= number_format($metrics['paying_users']) ?></div>
-        <div class="stat-label"><?= $isStreamer ? 'Mis Compradores' : 'Usuarios Pagadores' ?></div>
-    </div>
-    
-    <div class="stat-card">
-        <div class="stat-icon">🛒</div>
-        <div class="stat-value"><?= number_format($metrics['total_sales']) ?></div>
-        <div class="stat-label"><?= $isStreamer ? 'Mis Ventas' : 'Ventas Totales' ?></div>
-    </div>
-    
-    <div class="stat-card">
-        <div class="stat-icon">🎁</div>
-        <div class="stat-value"><?= number_format($metrics['free_access']) ?></div>
-        <div class="stat-label">Accesos Gratuitos</div>
-    </div>
-    
-    <?php if ($isAdmin): ?>
-    <div class="stat-card">
-        <div class="stat-icon">📈</div>
-        <div class="stat-value"><?= $conversion_rate ?>%</div>
-        <div class="stat-label">Tasa de Conversión</div>
-    </div>
-    <?php endif; ?>
+    <div class="stat-icon"><i class="fas fa-film"></i></div>
+    <div class="stat-value"><?= number_format($metrics['total_events']) ?></div>
+    <div class="stat-label"><?= $isStreamer ? 'Mis Eventos' : 'Eventos Creados' ?></div>
+</div>
+
+<?php if ($isAdmin): ?>
+<div class="stat-card">
+    <div class="stat-icon"><i class="fas fa-users"></i></div>
+    <div class="stat-value"><?= number_format($metrics['total_users']) ?></div>
+    <div class="stat-label">Usuarios Totales</div>
+</div>
+<?php endif; ?>
+
+<div class="stat-card">
+    <div class="stat-icon"><i class="fas fa-credit-card"></i></div>
+    <div class="stat-value"><?= number_format($metrics['paying_users']) ?></div>
+    <div class="stat-label"><?= $isStreamer ? 'Mis Compradores' : 'Usuarios Pagadores' ?></div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-icon"><i class="fas fa-shopping-cart"></i></div>
+    <div class="stat-value"><?= number_format($metrics['total_sales']) ?></div>
+    <div class="stat-label"><?= $isStreamer ? 'Mis Ventas' : 'Ventas Totales' ?></div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-icon"><i class="fas fa-gift"></i></div>
+    <div class="stat-value"><?= number_format($metrics['free_access']) ?></div>
+    <div class="stat-label">Accesos Gratuitos</div>
+</div>
+
+<?php if ($isAdmin): ?>
+<div class="stat-card">
+    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+    <div class="stat-value"><?= $conversion_rate ?>%</div>
+    <div class="stat-label">Tasa de Conversión</div>
+</div>
+<?php endif; ?>
+
 </div>
 
 <div class="section">

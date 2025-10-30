@@ -1,12 +1,16 @@
 <?php
 // api/webhooks/mercadopago.php
-// Webhook para procesar notificaciones de MercadoPago
+// Webhook para procesar notificaciones de MercadoPago (SDK v3.x)
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/payment.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+use MercadoPago\Client\Payment\PaymentClient;
+use MercadoPago\MercadoPagoConfig;
 
 // Log de la solicitud para debugging
-$log_file = __DIR__ . '/../../logs/webhook_mp.log';
+$log_file = __DIR__ . '/../../storage/logs/webhook_mp.log';
 $log_data = [
     'timestamp' => date('Y-m-d H:i:s'),
     'method' => $_SERVER['REQUEST_METHOD'],
@@ -46,12 +50,14 @@ try {
             throw new Exception('Payment ID not found');
         }
         
+        // Configurar MercadoPago SDK v3.x
+        MercadoPagoConfig::setAccessToken($mpConfig['access_token']);
+        
+        // Crear cliente de pagos
+        $client = new PaymentClient();
+        
         // Consultar el pago en MercadoPago
-        require_once __DIR__ . '/../../vendor/autoload.php';
-        
-        \MercadoPago\SDK::setAccessToken($mpConfig['access_token']);
-        
-        $payment = \MercadoPago\Payment::find_by_id($payment_id);
+        $payment = $client->get($payment_id);
         
         if (!$payment) {
             throw new Exception('Payment not found in MercadoPago');
@@ -134,7 +140,9 @@ try {
             // TODO: Enviar email de confirmación al usuario
             // TODO: Enviar notificación al streamer
             
-            file_put_contents($log_file, "Payment approved: {$payment_id} - Purchase: {$purchase['id']}\n", FILE_APPEND);
+            file_put_contents($log_file, "✅ Payment approved: {$payment_id} - Purchase: {$purchase['id']}\n", FILE_APPEND);
+        } else {
+            file_put_contents($log_file, "ℹ️ Payment status: {$payment->status} - Purchase: {$purchase['id']}\n", FILE_APPEND);
         }
         
         // Responder OK a MercadoPago
@@ -143,14 +151,14 @@ try {
         
     } else {
         // Otros tipos de notificaciones (merchant_order, etc.)
-        file_put_contents($log_file, "Unhandled notification type: " . ($data['type'] ?? 'unknown') . "\n", FILE_APPEND);
+        file_put_contents($log_file, "⚠️ Unhandled notification type: " . ($data['type'] ?? 'unknown') . "\n", FILE_APPEND);
         
         http_response_code(200);
         echo json_encode(['status' => 'ok', 'message' => 'Notification received']);
     }
     
 } catch (Exception $e) {
-    file_put_contents($log_file, "Error: " . $e->getMessage() . "\n", FILE_APPEND);
+    file_put_contents($log_file, "❌ Error: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n", FILE_APPEND);
     
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);

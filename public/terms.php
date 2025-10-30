@@ -2,10 +2,19 @@
 // public/terms.php
 session_start();
 
+// IMPORTANTE: Incluir Database ANTES de header.php
+require_once __DIR__ . '/../config/database.php';
+
 $page_title = "Términos y Condiciones";
 
 require_once 'header.php';
 require_once 'styles.php';
+
+// Cargar configuración para datos dinámicos
+require_once __DIR__ . '/../src/Helpers/SiteConfig.php';
+$contact_email = SiteConfig::get('contact_email', 'info@eventix.com.ar');
+$site_name = SiteConfig::siteName();
+$company_name = SiteConfig::get('company_name', 'Eventix S.R.L.');
 ?>
 
 <style>
@@ -115,7 +124,7 @@ require_once 'styles.php';
     </div>
 
     <div class="legal-content">
-        <p>Bienvenido a nuestra plataforma de streaming. Al acceder y utilizar nuestros servicios, aceptas estar vinculado por los siguientes términos y condiciones. Por favor, léelos cuidadosamente.</p>
+        <p>Bienvenido a <?= htmlspecialchars($site_name) ?>. Al acceder y utilizar nuestros servicios, aceptas estar vinculado por los siguientes términos y condiciones. Por favor, léelos cuidadosamente.</p>
 
         <h2>1. Aceptación de los Términos</h2>
         <p>Al crear una cuenta, acceder o utilizar cualquier parte de nuestra plataforma, aceptas cumplir con estos Términos y Condiciones, así como con nuestra Política de Privacidad. Si no estás de acuerdo con alguna parte de estos términos, no debes utilizar nuestros servicios.</p>
@@ -244,7 +253,7 @@ require_once 'styles.php';
         <h2>12. Contacto</h2>
         <p>Para preguntas sobre estos términos, puedes contactarnos en:</p>
         <ul>
-            <li><strong>Email:</strong> eventix@cellcomweb.com.ar</li>
+            <li><strong>Email:</strong> <a href="mailto:<?= htmlspecialchars($contact_email) ?>"><?= htmlspecialchars($contact_email) ?></a></li>
             <li><strong>Formulario:</strong> <a href="/public/contact.php">Página de Contacto</a></li>
         </ul>
 
@@ -257,7 +266,7 @@ require_once 'styles.php';
 
     <div class="legal-footer">
         <p><strong>Última actualización:</strong> <?= date('d/m/Y') ?></p>
-        <p>Desarrollado por <a href="https://www.cellcomweb.com.ar" target="_blank" rel="noopener">Cellcom Technology</a></p>
+        <p><?= htmlspecialchars($company_name) ?></p>
         <p>
             <a href="/public/privacy.php">Política de Privacidad</a> | 
             <a href="/public/contact.php">Contacto</a>

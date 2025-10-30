@@ -14,7 +14,8 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], $allowedRo
 require_once __DIR__ . '/../config/database.php';
 $db = Database::getInstance()->getConnection();
 
-$page_title = "Monitor de Sesiones Activas";
+$page_title = "Monitor de Sesiones";
+$page_icon = "📡";
 
 // Obtener sesiones activas
 $stmt = $db->query("
@@ -90,95 +91,62 @@ require_once 'header.php';
 require_once 'styles.php';
 ?>
 
+<!-- Font Awesome Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <style>
-.monitor-container {
-    max-width: 1400px;
-    margin: 0 auto;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 25px;
-    border-radius: 12px;
+.refresh-btn {
+    background: #4CAF50;
     color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.3s;
 }
 
-.stat-card h3 {
-    font-size: 36px;
-    margin: 0 0 10px 0;
-}
-
-.stat-card p {
-    margin: 0;
-    opacity: 0.9;
-}
-
-.sessions-table {
-    background: #1a1a1a;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 30px;
-    overflow-x: auto;
-}
-
-.sessions-table h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-table th {
-    text-align: left;
-    padding: 12px;
-    background: #2a2a2a;
-    color: #667eea;
-    font-weight: 600;
-}
-
-table td {
-    padding: 12px;
-    border-top: 1px solid #333;
+.refresh-btn:hover {
+    background: #45a049;
 }
 
 .status-active {
-    color: #27ae60;
+    color: #4CAF50;
     font-weight: bold;
 }
 
 .status-stale {
-    color: #f39c12;
+    color: #ff9800;
 }
 
-.status-conflict {
-    color: #e74c3c;
-    font-weight: bold;
+.status-inactive {
+    color: #999;
 }
 
 .ip-badge {
-    background: #2a2a2a;
-    padding: 4px 8px;
+    background: #f0f0f0;
+    padding: 4px 10px;
     border-radius: 4px;
     font-size: 12px;
-    font-family: monospace;
+    font-family: 'Courier New', monospace;
+    color: #333;
+    display: inline-block;
+}
+
+.ip-badge-conflict {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
 }
 
 .time-badge {
     background: #667eea;
     color: white;
-    padding: 4px 8px;
+    padding: 3px 8px;
     border-radius: 4px;
     font-size: 11px;
+    display: inline-block;
 }
 
 .user-agent {
@@ -187,206 +155,205 @@ table td {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
-    color: #999;
+    color: #666;
 }
 
 .action-btn {
-    padding: 6px 12px;
-    background: #e74c3c;
+    padding: 6px 14px;
+    background: #f44336;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
+    font-weight: bold;
+    transition: all 0.3s;
 }
 
 .action-btn:hover {
-    background: #c0392b;
+    background: #da190b;
 }
 
-.refresh-btn {
-    background: #27ae60;
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    margin-bottom: 20px;
-}
-
-.refresh-btn:hover {
-    background: #229954;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
+.conflict-arrow {
     color: #999;
+    margin: 0 8px;
 }
 
-.empty-state-icon {
-    font-size: 64px;
-    margin-bottom: 20px;
-    opacity: 0.5;
+@media (max-width: 768px) {
+    .user-agent {
+        max-width: 150px;
+    }
 }
 </style>
 
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px;">
+    <div>
+        <button onclick="location.reload()" class="refresh-btn">
+            <i class="fas fa-sync-alt"></i> Actualizar
+        </button>
+    </div>
+</div>
+
+<!-- Estadísticas -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-value"><?= $stats['unique_viewers'] ?></div>
+        <div class="stat-label">Usuarios Únicos Activos</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-tv"></i></div>
+        <div class="stat-value"><?= $stats['total_sessions'] ?></div>
+        <div class="stat-label">Sesiones Totales</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-film"></i></div>
+        <div class="stat-value"><?= $stats['active_events'] ?></div>
+        <div class="stat-label">Eventos en Vivo</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-value"><?= count($recent_conflicts) ?></div>
+        <div class="stat-label">Conflictos (24h)</div>
+    </div>
+</div>
+
+<!-- Sesiones Activas -->
 <div class="section">
-    <div class="monitor-container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-            <h1>🔍 Monitor de Sesiones Activas</h1>
-            <button onclick="location.reload()" class="refresh-btn">🔄 Actualizar</button>
+    <h2><i class="fas fa-broadcast-tower"></i> Sesiones Activas Ahora</h2>
+    <?php if (empty($active_sessions)): ?>
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fas fa-bed"></i></div>
+            <h3>No hay sesiones activas</h3>
+            <p>No hay usuarios conectados en este momento.</p>
         </div>
-
-        <!-- Estadísticas -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3><?= $stats['unique_viewers'] ?></h3>
-                <p>👤 Usuarios Únicos Activos</p>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                <h3><?= $stats['total_sessions'] ?></h3>
-                <p>📺 Sesiones Totales</p>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                <h3><?= $stats['active_events'] ?></h3>
-                <p>🎬 Eventos en Vivo</p>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                <h3><?= count($recent_conflicts) ?></h3>
-                <p>⚠️ Conflictos (24h)</p>
-            </div>
-        </div>
-
-        <!-- Sesiones Activas -->
-        <div class="sessions-table">
-            <h2>📡 Sesiones Activas Ahora</h2>
-            <?php if (empty($active_sessions)): ?>
-                <div class="empty-state">
-                    <div class="empty-state-icon">💤</div>
-                    <p>No hay sesiones activas en este momento.</p>
-                </div>
-            <?php else: ?>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Evento</th>
-                            <th>IP</th>
-                            <th>Dispositivo</th>
-                            <th>Último Heartbeat</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($active_sessions as $session): ?>
-                        <tr>
-                            <td>
-                                <strong><?= htmlspecialchars($session['full_name']) ?></strong><br>
-                                <small style="color: #999;"><?= htmlspecialchars($session['email']) ?></small>
-                            </td>
-                            <td><?= htmlspecialchars($session['event_title']) ?></td>
-                            <td><span class="ip-badge"><?= htmlspecialchars($session['ip_address']) ?></span></td>
-                            <td>
-                                <div class="user-agent" title="<?= htmlspecialchars($session['user_agent']) ?>">
-                                    <?= htmlspecialchars(substr($session['user_agent'], 0, 50)) ?>...
-                                </div>
-                            </td>
-                            <td>
-                                <?= date('H:i:s', strtotime($session['last_heartbeat'])) ?><br>
-                                <span class="time-badge">Hace <?= $session['seconds_ago'] ?>s</span>
-                            </td>
-                            <td>
-                                <?php if ($session['seconds_ago'] < 30): ?>
-                                    <span class="status-active">● Activo</span>
-                                <?php elseif ($session['seconds_ago'] < 120): ?>
-                                    <span class="status-stale">● Inactivo</span>
-                                <?php else: ?>
-                                    <span style="color: #999;">● Desconectado</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <button class="action-btn" onclick="killSession(<?= $session['id'] ?>)">
-                                    🚫 Expulsar
-                                </button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
-        </div>
-
-        <!-- Conflictos Recientes -->
-        <div class="sessions-table">
-            <h2>⚠️ Conflictos Recientes (últimas 24h)</h2>
-            <?php if (empty($recent_conflicts)): ?>
-                <div class="empty-state">
-                    <div class="empty-state-icon">✅</div>
-                    <p>No hay conflictos registrados en las últimas 24 horas.</p>
-                </div>
-            <?php else: ?>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Evento</th>
-                            <th>IP Anterior → Nueva</th>
-                            <th>Hace</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($recent_conflicts as $conflict): ?>
-                        <tr>
-                            <td>
-                                <strong><?= htmlspecialchars($conflict['full_name']) ?></strong><br>
-                                <small style="color: #999;"><?= htmlspecialchars($conflict['email']) ?></small>
-                            </td>
-                            <td><?= htmlspecialchars($conflict['event_title']) ?></td>
-                            <td>
-                                <span class="ip-badge"><?= htmlspecialchars($conflict['old_ip_address']) ?></span>
-                                →
-                                <span class="ip-badge" style="background: #e74c3c;"><?= htmlspecialchars($conflict['new_ip_address']) ?></span>
-                            </td>
-                            <td><?= $conflict['minutes_ago'] ?> minutos</td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
-        </div>
-
-        <!-- Top Usuarios con Conflictos -->
-        <?php if (!empty($top_conflicts)): ?>
-        <div class="sessions-table">
-            <h2>👥 Usuarios con Más Conflictos (24h)</h2>
+    <?php else: ?>
+        <div class="table-responsive">
             <table>
                 <thead>
                     <tr>
                         <th>Usuario</th>
-                        <th>Email</th>
-                        <th>Conflictos</th>
+                        <th>Evento</th>
+                        <th>IP</th>
+                        <th>Dispositivo</th>
+                        <th>Último Heartbeat</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($top_conflicts as $user): ?>
+                    <?php foreach ($active_sessions as $session): ?>
                     <tr>
-                        <td><strong><?= htmlspecialchars($user['full_name']) ?></strong></td>
-                        <td><?= htmlspecialchars($user['email']) ?></td>
-                        <td><span class="status-conflict"><?= $user['conflict_count'] ?> conflictos</span></td>
+                        <td>
+                            <strong><?= htmlspecialchars($session['full_name']) ?></strong><br>
+                            <small style="color: #999;"><?= htmlspecialchars($session['email']) ?></small>
+                        </td>
+                        <td><?= htmlspecialchars($session['event_title']) ?></td>
+                        <td><span class="ip-badge"><?= htmlspecialchars($session['ip_address']) ?></span></td>
+                        <td>
+                            <div class="user-agent" title="<?= htmlspecialchars($session['user_agent']) ?>">
+                                <?= htmlspecialchars(substr($session['user_agent'], 0, 50)) ?>...
+                            </div>
+                        </td>
+                        <td>
+                            <?= date('H:i:s', strtotime($session['last_heartbeat'])) ?><br>
+                            <span class="time-badge">Hace <?= $session['seconds_ago'] ?>s</span>
+                        </td>
+                        <td>
+                            <?php if ($session['seconds_ago'] < 30): ?>
+                                <span class="status-active">● Activo</span>
+                            <?php elseif ($session['seconds_ago'] < 120): ?>
+                                <span class="status-stale">● Inactivo</span>
+                            <?php else: ?>
+                                <span class="status-inactive">● Desconectado</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <button class="action-btn" onclick="killSession(<?= $session['id'] ?>)">
+                                <i class="fas fa-user-times"></i> Expulsar
+                            </button>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
-        <?php endif; ?>
+    <?php endif; ?>
+</div>
 
-        <div style="text-align: center; margin-top: 30px;">
-            <a href="/admin/dashboard.php" class="btn btn-secondary">← Volver al Dashboard</a>
+<!-- Conflictos Recientes -->
+<div class="section">
+    <h2><i class="fas fa-exclamation-circle"></i> Conflictos Recientes (últimas 24h)</h2>
+    <?php if (empty($recent_conflicts)): ?>
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fas fa-check-circle"></i></div>
+            <h3>Sin conflictos</h3>
+            <p>No hay conflictos registrados en las últimas 24 horas.</p>
         </div>
+    <?php else: ?>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Evento</th>
+                        <th>Cambio de IP</th>
+                        <th>Hace</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($recent_conflicts as $conflict): ?>
+                    <tr>
+                        <td>
+                            <strong><?= htmlspecialchars($conflict['full_name']) ?></strong><br>
+                            <small style="color: #999;"><?= htmlspecialchars($conflict['email']) ?></small>
+                        </td>
+                        <td><?= htmlspecialchars($conflict['event_title']) ?></td>
+                        <td>
+                            <span class="ip-badge"><?= htmlspecialchars($conflict['old_ip_address']) ?></span>
+                            <span class="conflict-arrow">→</span>
+                            <span class="ip-badge ip-badge-conflict"><?= htmlspecialchars($conflict['new_ip_address']) ?></span>
+                        </td>
+                        <td><?= $conflict['minutes_ago'] ?> minutos</td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- Top Usuarios con Conflictos -->
+<?php if (!empty($top_conflicts)): ?>
+<div class="section">
+    <h2><i class="fas fa-user-shield"></i> Usuarios con Más Conflictos (24h)</h2>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Email</th>
+                    <th>Conflictos</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($top_conflicts as $user): ?>
+                <tr>
+                    <td><strong><?= htmlspecialchars($user['full_name']) ?></strong></td>
+                    <td><?= htmlspecialchars($user['email']) ?></td>
+                    <td><span class="badge badge-danger"><?= $user['conflict_count'] ?> conflictos</span></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
+</div>
+<?php endif; ?>
+
+<div style="text-align: center; margin-top: 30px;">
+    <a href="/admin/dashboard.php" class="btn btn-primary">
+        <i class="fas fa-arrow-left"></i> Volver al Dashboard
+    </a>
 </div>
 
 <script>
