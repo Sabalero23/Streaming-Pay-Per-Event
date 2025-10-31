@@ -1,71 +1,94 @@
 <?php
-// public/login.php
-// Página de inicio de sesión
+// public/login.php - CON VALIDACIÓN DE EMAIL VERIFICADO
+// Este es un ejemplo de cómo debería ser tu login.php actualizado
 
 session_start();
 
-// Si ya está logueado, redirigir al inicio
+// Si ya está logueado, redirigir
 if (isset($_SESSION['user_id'])) {
-    header('Location: /public/profile.php');
+    header('Location: /public/events.php');
     exit;
 }
 
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../src/Models/User.php';
-require_once __DIR__ . '/../src/Services/AuthService.php';
 
 $error = '';
 $success = '';
 
+// Mensaje de registro exitoso
+if (isset($_GET['registered']) && $_GET['registered'] == 1) {
+    $success = '¡Registro exitoso! Por favor revisa tu email para activar tu cuenta antes de iniciar sesión.';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = $_POST['email'] ?? '';
+    $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $remember = isset($_POST['remember']);
     
+    // Validaciones
     if (empty($email) || empty($password)) {
-        $error = 'Por favor completa todos los campos';
+        $error = 'Por favor ingresa tu email y contraseña';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Email inválido';
     } else {
         try {
-            $userModel = new User();
-            $user = $userModel->login($email, $password);
+            $db = Database::getInstance()->getConnection();
             
-            // Guardar sesión
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_email'] = $user['email'];
-            $_SESSION['user_name'] = $user['full_name'];
-            $_SESSION['user_role'] = $user['role'];
+            // ✅ IMPORTANTE: También obtener email_verified
+            $stmt = $db->prepare("
+                SELECT id, email, password_hash, full_name, role, status, email_verified
+                FROM users 
+                WHERE email = ?
+            ");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
             
-            // Generar JWT token
-            $authService = new AuthService();
-            $token = $authService->generateToken($user['id'], $user['email'], $user['role']);
-            $_SESSION['jwt_token'] = $token;
-            
-            // Remember me
-            if ($remember) {
-                setcookie('remember_token', $token, time() + (86400 * 30), '/');
+            if (!$user) {
+                $error = 'Email o contraseña incorrectos';
+            } elseif ($user['status'] !== 'active') {
+                $error = 'Tu cuenta ha sido suspendida. Contacta al soporte.';
+            } elseif (!password_verify($password, $user['password_hash'])) {
+                $error = 'Email o contraseña incorrectos';
+            } 
+            // ✅ NUEVA VALIDACIÓN: Verificar que el email esté verificado
+            elseif ($user['email_verified'] == 0) {
+                $error = 'Tu cuenta aún no está activada. Por favor revisa tu email y haz clic en el enlace de activación.';
+                $error .= '<br><br><a href="/public/resend-activation.php?email=' . urlencode($email) . '" style="color: inherit; font-weight: bold;">Reenviar email de activación</a>';
+            } 
+            else {
+                // Login exitoso
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['user_email'] = $user['email'];
+                $_SESSION['user_name'] = $user['full_name'];
+                $_SESSION['user_role'] = $user['role'];
+                
+                // Actualizar última conexión
+                $stmt = $db->prepare("UPDATE users SET updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$user['id']]);
+                
+                // Remember me (opcional)
+                if ($remember) {
+                    $token = bin2hex(random_bytes(32));
+                    setcookie('remember_token', $token, time() + (86400 * 30), '/'); // 30 días
+                    
+                    // Guardar token en BD (necesitarías crear esta tabla)
+                    // $stmt = $db->prepare("INSERT INTO remember_tokens ...");
+                }
+                
+                // Redirigir según el rol
+                if ($user['role'] === 'admin') {
+                    header('Location: /admin/dashboard.php');
+                } else {
+                    header('Location: /public/events.php');
+                }
+                exit;
             }
-            
-            // Redirigir según rol
-            if ($user['role'] === 'admin') {
-                header('Location: /admin/dashboard.php');
-            } else {
-                header('Location: /public/profile.php');
-            }
-            exit;
             
         } catch (Exception $e) {
-            $error = $e->getMessage();
+            error_log("Error en login: " . $e->getMessage());
+            $error = 'Ha ocurrido un error. Por favor intenta de nuevo.';
         }
     }
-}
-
-// Verificar si hay mensaje de éxito (ej: después de registro)
-if (isset($_GET['registered'])) {
-    $success = 'Registro exitoso. Por favor inicia sesión.';
-}
-
-if (isset($_GET['verified'])) {
-    $success = 'Email verificado correctamente. Ya puedes iniciar sesión.';
 }
 ?>
 <!DOCTYPE html>
@@ -126,6 +149,7 @@ if (isset($_GET['verified'])) {
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 14px;
+            line-height: 1.6;
         }
         
         .alert-error {
@@ -140,8 +164,14 @@ if (isset($_GET['verified'])) {
             border: 1px solid #66bb6a;
         }
         
+        .alert a {
+            color: inherit;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         
         .form-group label {
@@ -165,35 +195,29 @@ if (isset($_GET['verified'])) {
             border-color: #667eea;
         }
         
-        .form-row {
+        .form-options {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
+            font-size: 14px;
         }
         
-        .checkbox-group {
+        .remember-me {
             display: flex;
             align-items: center;
         }
         
-        .checkbox-group input {
+        .remember-me input {
             margin-right: 8px;
         }
         
-        .checkbox-group label {
-            font-size: 14px;
-            color: #666;
-            cursor: pointer;
-        }
-        
-        .forgot-password {
-            font-size: 14px;
+        .forgot-password a {
             color: #667eea;
             text-decoration: none;
         }
         
-        .forgot-password:hover {
+        .forgot-password a:hover {
             text-decoration: underline;
         }
         
@@ -281,7 +305,7 @@ if (isset($_GET['verified'])) {
         <div class="login-body">
             <?php if ($error): ?>
             <div class="alert alert-error">
-                <?= htmlspecialchars($error) ?>
+                <?= $error ?>
             </div>
             <?php endif; ?>
             
@@ -307,13 +331,14 @@ if (isset($_GET['verified'])) {
                            required>
                 </div>
                 
-                <div class="form-row">
-                    <div class="checkbox-group">
+                <div class="form-options">
+                    <div class="remember-me">
                         <input type="checkbox" id="remember" name="remember">
                         <label for="remember">Recordarme</label>
                     </div>
-                    
-                    <a href="/public/forgot-password.php" class="forgot-password">¿Olvidaste tu contraseña?</a>
+                    <div class="forgot-password">
+                        <a href="/public/forgot-password.php">¿Olvidaste tu contraseña?</a>
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn">Iniciar Sesión</button>

@@ -9,6 +9,29 @@ $social_facebook = SiteConfig::get('social_facebook', '');
 $social_instagram = SiteConfig::get('social_instagram', '');
 $social_twitter = SiteConfig::get('social_twitter', '');
 $social_youtube = SiteConfig::get('social_youtube', '');
+
+// Contador de visitas
+$counter_file = __DIR__ . '/../data/visitor_counter.txt';
+$counter_dir = dirname($counter_file);
+
+// Crear directorio si no existe
+if (!file_exists($counter_dir)) {
+    mkdir($counter_dir, 0755, true);
+}
+
+// Leer o inicializar contador
+if (file_exists($counter_file)) {
+    $visitor_count = (int)file_get_contents($counter_file);
+} else {
+    $visitor_count = 0;
+}
+
+// Incrementar y guardar (solo una vez por sesión)
+if (!isset($_SESSION['counted'])) {
+    $visitor_count++;
+    file_put_contents($counter_file, $visitor_count);
+    $_SESSION['counted'] = true;
+}
 ?>
 </div><!-- /.main-content -->
 
@@ -168,6 +191,27 @@ $social_youtube = SiteConfig::get('social_youtube', '');
     color: #e50914;
 }
 
+.visitor-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f5f5f5;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #666;
+    margin-top: 10px;
+}
+
+.visitor-counter-icon {
+    font-size: 14px;
+}
+
+.visitor-counter-number {
+    font-weight: 600;
+    color: #e50914;
+}
+
 @media (max-width: 768px) {
     .footer-grid {
         grid-template-columns: 1fr;
@@ -284,6 +328,12 @@ $social_youtube = SiteConfig::get('social_youtube', '');
         <!-- Footer Bottom -->
         <div class="footer-bottom">
             <p>&copy; <?= date('Y') ?> <?= htmlspecialchars($company_name) ?>. Todos los derechos reservados. | Desarrollado por <a href="https://www.cellcomweb.com.ar" target="_blank" rel="noopener">CellcomTechnology</a></p>
+            
+            <div class="visitor-counter">
+                <span class="visitor-counter-icon">👁️</span>
+                <span>Visitas:</span>
+                <span class="visitor-counter-number"><?= number_format($visitor_count, 0, ',', '.') ?></span>
+            </div>
             
             <?php if (isset($_SESSION['user_id'])): ?>
             <div class="footer-session-info">

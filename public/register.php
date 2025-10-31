@@ -1,6 +1,6 @@
 <?php
 // public/register.php
-// Página de registro de nuevos usuarios
+// Página de registro de nuevos usuarios con activación por email
 
 session_start();
 
@@ -12,9 +12,11 @@ if (isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../src/Models/User.php';
+require_once __DIR__ . '/../src/Services/EmailService.php';
 
 $error = '';
 $success = '';
+$debug_info = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = trim($_POST['full_name'] ?? '');
@@ -37,15 +39,132 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Debes aceptar los términos y condiciones';
     } else {
         try {
-            $userModel = new User();
-            $userId = $userModel->register($email, $password, $fullName, $phone);
+            $debug_info[] = "1. Validaciones OK";
             
-            // Redirigir al login con mensaje de éxito
-            header('Location: /public/login.php?registered=1');
-            exit;
+            $db = Database::getInstance()->getConnection();
+            $debug_info[] = "2. Conexión a BD OK";
+            
+            // Verificar si el email ya existe
+            $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            if ($stmt->fetch()) {
+                $error = 'Este email ya está registrado. <a href="/public/login.php">Inicia sesión</a> o <a href="/public/forgot-password.php">recupera tu contraseña</a>.';
+            } else {
+                $debug_info[] = "3. Email disponible";
+                
+                // Generar token de verificación (válido por 24 horas)
+                $verificationToken = bin2hex(random_bytes(32));
+                $debug_info[] = "4. Token generado: " . substr($verificationToken, 0, 10) . "...";
+                
+                // Hash de la contraseña
+                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                $debug_info[] = "5. Password hasheada";
+                
+                // Insertar usuario con email_verified = 0
+                $stmt = $db->prepare("
+                    INSERT INTO users (
+                        email, password_hash, full_name, phone, 
+                        role, status, email_verified, verification_token, 
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, 'user', 'active', 0, ?, NOW(), NOW())
+                ");
+                
+                $stmt->execute([
+                    $email,
+                    $passwordHash,
+                    $fullName,
+                    $phone,
+                    $verificationToken
+                ]);
+                
+                $userId = $db->lastInsertId();
+                $debug_info[] = "6. Usuario creado con ID: $userId (email_verified=0)";
+                
+                // Enviar email de activación
+                try {
+                    $emailService = new EmailService();
+                    $debug_info[] = "7. EmailService instanciado";
+                    
+                    $emailSent = $emailService->sendAccountActivation($email, $verificationToken, $fullName);
+                    $debug_info[] = "8. Intento de envío de activación: " . ($emailSent ? 'EXITOSO' : 'FALLIDO');
+                    
+                    if ($emailSent) {
+                        $success = '¡Registro exitoso! Hemos enviado un email de activación a <strong>' . htmlspecialchars($email) . '</strong>. 
+                                    Por favor revisa tu bandeja de entrada (y spam) y haz clic en el enlace para activar tu cuenta.';
+                        
+                        // En desarrollo, mostrar el link de activación
+                        if ($_SERVER['HTTP_HOST'] === 'localhost' || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false) {
+                            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+                            $activationLink = $protocol . "://" . $_SERVER['HTTP_HOST'] . "/public/activate-account.php?token=" . $verificationToken;
+                            $success .= '<br><br><strong>🔧 Modo Desarrollo:</strong>';
+                            $success .= '<br><a href="' . $activationLink . '" target="_blank">Haz clic aquí para activar la cuenta</a>';
+                            $success .= '<br><small style="font-size: 11px;">Link de activación: ' . $activationLink . '</small>';
+                            
+                            // Mostrar debug info
+                            $success .= '<br><br><strong>Debug Info:</strong><br>';
+                            $success .= '<div style="text-align: left; font-size: 11px; background: #f0f0f0; padding: 10px; border-radius: 5px;">';
+                            foreach ($debug_info as $info) {
+                                $success .= '✓ ' . htmlspecialchars($info) . '<br>';
+                            }
+                            $success .= '</div>';
+                        }
+                        
+                        // Limpiar el formulario
+                        $_POST = [];
+                        
+                    } else {
+                        $error = 'El usuario fue creado pero no se pudo enviar el email de activación. ';
+                        $error .= 'Por favor contacta al soporte para activar tu cuenta manualmente.';
+                        
+                        // En desarrollo, mostrar más detalles
+                        if ($_SERVER['HTTP_HOST'] === 'localhost' || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false) {
+                            $error .= '<br><br><strong>Debug Info:</strong><br>';
+                            $error .= '<div style="text-align: left; font-size: 11px;">';
+                            foreach ($debug_info as $info) {
+                                $error .= htmlspecialchars($info) . '<br>';
+                            }
+                            $error .= '</div>';
+                        }
+                    }
+                    
+                } catch (Exception $e) {
+                    $debug_info[] = "8. ERROR al enviar email: " . $e->getMessage();
+                    error_log("Error enviando email de activación: " . $e->getMessage());
+                    
+                    $error = 'El usuario fue creado pero hubo un error al enviar el email de activación. ';
+                    
+                    // En desarrollo, mostrar el error
+                    if ($_SERVER['HTTP_HOST'] === 'localhost' || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false) {
+                        $error .= '<br><br><strong>Error:</strong> ' . htmlspecialchars($e->getMessage());
+                        $error .= '<br><br><strong>Debug Info:</strong><br>';
+                        $error .= '<div style="text-align: left; font-size: 11px;">';
+                        foreach ($debug_info as $info) {
+                            $error .= htmlspecialchars($info) . '<br>';
+                        }
+                        $error .= '</div>';
+                    } else {
+                        $error .= 'Por favor contacta al soporte.';
+                    }
+                }
+            }
             
         } catch (Exception $e) {
-            $error = $e->getMessage();
+            $errorMsg = $e->getMessage();
+            error_log("Error en register: " . $errorMsg);
+            error_log("Stack trace: " . $e->getTraceAsString());
+            
+            // En desarrollo, mostrar el error real
+            if ($_SERVER['HTTP_HOST'] === 'localhost' || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false) {
+                $error = '<strong>Error de desarrollo:</strong><br>' . htmlspecialchars($errorMsg);
+                $error .= '<br><br><strong>Debug Info:</strong><br>';
+                $error .= '<div style="text-align: left; font-size: 11px;">';
+                foreach ($debug_info as $info) {
+                    $error .= htmlspecialchars($info) . '<br>';
+                }
+                $error .= '</div>';
+            } else {
+                $error = 'Ha ocurrido un error. Por favor intenta de nuevo más tarde.';
+            }
         }
     }
 }
@@ -110,12 +229,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 14px;
+            line-height: 1.6;
         }
         
         .alert-error {
             background: #ffebee;
             color: #c62828;
             border: 1px solid #ef5350;
+        }
+        
+        .alert-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #66bb6a;
+        }
+        
+        .alert a {
+            color: inherit;
+            font-weight: bold;
+            text-decoration: underline;
         }
         
         .form-group {
@@ -287,9 +419,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="register-body">
             <?php if ($error): ?>
             <div class="alert alert-error">
-                <?= htmlspecialchars($error) ?>
+                <?= $error ?>
             </div>
             <?php endif; ?>
+            
+            <?php if ($success): ?>
+            <div class="alert alert-success">
+                <?= $success ?>
+            </div>
+            <?php else: ?>
             
             <form method="POST" action="/public/register.php" id="registerForm">
                 <div class="form-group">
@@ -306,6 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            placeholder="tu@email.com" 
                            value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
                            required>
+                    <small>Te enviaremos un email para activar tu cuenta</small>
                 </div>
                 
                 <div class="form-group">
@@ -346,6 +485,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <button type="submit" class="btn">Crear Cuenta</button>
             </form>
+            
+            <?php endif; ?>
             
             <div class="divider">o</div>
             

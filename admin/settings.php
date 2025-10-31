@@ -7,6 +7,7 @@ session_start();
 $page_title = "Configuración del Sistema";
 $page_icon = "⚙️";
 
+require_once __DIR__ . '/../src/Services/EmailService.php';
 require_once __DIR__ . '/../config/database.php';
 $db = Database::getInstance()->getConnection();
 
@@ -148,6 +149,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
     
+    if ($_POST['action'] === 'save_email') {
+    try {
+        $db->beginTransaction();
+        
+        setConfig($db, 'smtp_enabled', isset($_POST['smtp_enabled']) ? 'true' : 'false', $_SESSION['user_id']);
+        setConfig($db, 'smtp_host', $_POST['smtp_host'] ?? 'smtp.gmail.com', $_SESSION['user_id']);
+        setConfig($db, 'smtp_port', $_POST['smtp_port'] ?? '587', $_SESSION['user_id']);
+        setConfig($db, 'smtp_username', $_POST['smtp_username'] ?? '', $_SESSION['user_id']);
+        
+        // Solo actualizar password si se proporcionó uno nuevo
+        if (!empty($_POST['smtp_password'])) {
+            setConfig($db, 'smtp_password', $_POST['smtp_password'], $_SESSION['user_id']);
+        }
+        
+        setConfig($db, 'smtp_encryption', $_POST['smtp_encryption'] ?? 'tls', $_SESSION['user_id']);
+        setConfig($db, 'smtp_debug', isset($_POST['smtp_debug']) ? 'true' : 'false', $_SESSION['user_id']);
+        setConfig($db, 'email_from_address', $_POST['email_from_address'] ?? '', $_SESSION['user_id']);
+        setConfig($db, 'email_from_name', $_POST['email_from_name'] ?? 'Eventix', $_SESSION['user_id']);
+        setConfig($db, 'email_reply_to', $_POST['email_reply_to'] ?? '', $_SESSION['user_id']);
+        
+        $db->commit();
+        $success_message = "✅ Configuración de email guardada correctamente";
+    } catch (Exception $e) {
+        $db->rollBack();
+        $error_message = "❌ Error al guardar: " . $e->getMessage();
+    }
+}
+
+if ($_POST['action'] === 'test_email') {
+    try {
+        $emailService = new EmailService();
+        $testEmail = $_POST['test_email'] ?? '';
+        
+        if (empty($testEmail)) {
+            $error_message = "❌ Por favor ingresa un email de prueba";
+        } elseif (!filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
+            $error_message = "❌ Email inválido";
+        } else {
+            $result = $emailService->testConnection($testEmail);
+            if ($result) {
+                $success_message = "✅ Email de prueba enviado exitosamente a {$testEmail}";
+            } else {
+                $error_message = "❌ Error al enviar email de prueba";
+            }
+        }
+    } catch (Exception $e) {
+        $error_message = "❌ Error: " . $e->getMessage();
+    }
+}
+    
     if ($_POST['action'] === 'save_streamer_commission') {
         try {
             $streamer_id = $_POST['streamer_id'];
@@ -227,7 +278,19 @@ $config = [
     // Comisiones
     'default_commission' => getConfig($db, 'default_commission_percentage', '70'),
     'platform_commission' => getConfig($db, 'platform_commission', '30'),
-    'min_payout' => getConfig($db, 'min_payout_amount', '1000')
+    'min_payout' => getConfig($db, 'min_payout_amount', '1000'),
+    
+    // Email
+'smtp_enabled' => getConfig($db, 'smtp_enabled', 'false') === 'true',
+'smtp_host' => getConfig($db, 'smtp_host', 'smtp.gmail.com'),
+'smtp_port' => getConfig($db, 'smtp_port', '587'),
+'smtp_username' => getConfig($db, 'smtp_username', ''),
+'smtp_password' => getConfig($db, 'smtp_password', ''),
+'smtp_encryption' => getConfig($db, 'smtp_encryption', 'tls'),
+'smtp_debug' => getConfig($db, 'smtp_debug', 'false') === 'true',
+'email_from_address' => getConfig($db, 'email_from_address', 'noreply@eventix.com.ar'),
+'email_from_name' => getConfig($db, 'email_from_name', 'Eventix'),
+'email_reply_to' => getConfig($db, 'email_reply_to', 'soporte@eventix.com.ar')
 ];
 
 // Obtener streamers
@@ -478,6 +541,9 @@ require_once 'styles.php';
     <button class="tab <?= $active_tab === 'streamers' ? 'active' : '' ?>" onclick="switchTab('streamers')">
         🎬 Streamers
     </button>
+    <button class="tab <?= $active_tab === 'email' ? 'active' : '' ?>" onclick="switchTab('email')">
+    📧 Email / SMTP
+</button>
 </div>
 
 <!-- TAB: Marca -->
@@ -839,6 +905,8 @@ require_once 'styles.php';
     </div>
 </div>
 
+
+
 <!-- TAB: STREAMERS (código existente) -->
 <div class="tab-content <?= $active_tab === 'streamers' ? 'active' : '' ?>" id="streamers">
     <div class="config-section">
@@ -952,8 +1020,242 @@ require_once 'styles.php';
             </div>
             <?php endforeach; ?>
         <?php endif; ?>
+            </div>
+</div>
+        
+        <!-- TAB: Email -->
+<div class="tab-content <?= $active_tab === 'email' ? 'active' : '' ?>" id="email">
+    <div class="config-section">
+        <h3>📧 Configuración de Email y SMTP</h3>
+        <p style="color: #666; margin-bottom: 20px;">
+            Configura el envío de emails para recuperación de contraseña, verificaciones y notificaciones.
+        </p>
+        
+        <form method="POST">
+            <input type="hidden" name="action" value="save_email">
+            
+            <!-- Estado SMTP -->
+            <div class="form-group">
+                <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" name="smtp_enabled" value="1" 
+                           <?= $config['smtp_enabled'] ? 'checked' : '' ?>>
+                    <span><strong>Activar envío de emails por SMTP</strong></span>
+                </label>
+                <div class="help-text">
+                    Si está desactivado, se usará la función mail() de PHP (menos confiable)
+                </div>
+            </div>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+            
+            <h4 style="margin-bottom: 20px; color: #2c3e50;">🔧 Configuración del Servidor SMTP</h4>
+            
+            <!-- Proveedor común -->
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #90caf9;">
+                <p style="margin: 0 0 10px 0; font-weight: 600; color: #1565c0;">
+                    📌 Configuraciones comunes:
+                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 13px;">
+                    <div>
+                        <strong>Gmail:</strong><br>
+                        Host: smtp.gmail.com<br>
+                        Puerto: 587 (TLS)<br>
+                        <a href="https://support.google.com/accounts/answer/185833" target="_blank" style="color: #1565c0;">
+                            → Crear contraseña de aplicación
+                        </a>
+                    </div>
+                    <div>
+                        <strong>Outlook/Hotmail:</strong><br>
+                        Host: smtp-mail.outlook.com<br>
+                        Puerto: 587 (TLS)
+                    </div>
+                    <div>
+                        <strong>Yahoo:</strong><br>
+                        Host: smtp.mail.yahoo.com<br>
+                        Puerto: 465 (SSL)
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Servidor SMTP (Host) *</label>
+                    <input type="text" name="smtp_host" 
+                           value="<?= htmlspecialchars($config['smtp_host']) ?>" 
+                           placeholder="smtp.gmail.com" required>
+                    <div class="help-text">Dirección del servidor SMTP</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Puerto SMTP *</label>
+                    <input type="number" name="smtp_port" 
+                           value="<?= $config['smtp_port'] ?>" 
+                           placeholder="587" required>
+                    <div class="help-text">587 para TLS, 465 para SSL</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Encriptación *</label>
+                    <select name="smtp_encryption">
+                        <option value="tls" <?= $config['smtp_encryption'] === 'tls' ? 'selected' : '' ?>>
+                            TLS (Puerto 587)
+                        </option>
+                        <option value="ssl" <?= $config['smtp_encryption'] === 'ssl' ? 'selected' : '' ?>>
+                            SSL (Puerto 465)
+                        </option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Usuario SMTP (Email) *</label>
+                    <input type="email" name="smtp_username" 
+                           value="<?= htmlspecialchars($config['smtp_username']) ?>" 
+                           placeholder="tu-email@gmail.com" required>
+                    <div class="help-text">Tu dirección de email completa</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Contraseña SMTP *</label>
+                    <input type="password" name="smtp_password" 
+                           placeholder="<?= !empty($config['smtp_password']) ? '••••••••••••' : 'Contraseña o App Password' ?>">
+                    <div class="help-text">
+                        <?= !empty($config['smtp_password']) ? 'Dejar vacío para mantener la actual' : 'Para Gmail, usa una "Contraseña de Aplicación"' ?>
+                    </div>
+                </div>
+            </div>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+            
+            <h4 style="margin-bottom: 20px; color: #2c3e50;">✉️ Información del Remitente</h4>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Email Remitente *</label>
+                    <input type="email" name="email_from_address" 
+                           value="<?= htmlspecialchars($config['email_from_address']) ?>" 
+                           placeholder="noreply@eventix.com.ar" required>
+                    <div class="help-text">Email que aparecerá como remitente</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Nombre del Remitente *</label>
+                    <input type="text" name="email_from_name" 
+                           value="<?= htmlspecialchars($config['email_from_name']) ?>" 
+                           placeholder="Eventix" required>
+                    <div class="help-text">Nombre que verán los destinatarios</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Email de Respuesta</label>
+                    <input type="email" name="email_reply_to" 
+                           value="<?= htmlspecialchars($config['email_reply_to']) ?>" 
+                           placeholder="soporte@eventix.com.ar">
+                    <div class="help-text">Email para que los usuarios respondan</div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="smtp_debug" value="1" 
+                           <?= $config['smtp_debug'] ? 'checked' : '' ?>>
+                    Modo Debug (solo para desarrollo)
+                </label>
+                <div class="help-text">Muestra información detallada en los logs</div>
+            </div>
+            
+            <div style="margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-success">
+                    💾 Guardar Configuración de Email
+                </button>
+            </div>
+        </form>
+        
+        <!-- Test de conexión -->
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #e0e0e0;">
+        
+        <h4 style="margin-bottom: 20px; color: #2c3e50;">🧪 Probar Configuración</h4>
+        <p style="color: #666; margin-bottom: 15px;">
+            Envía un email de prueba para verificar que la configuración funciona correctamente.
+        </p>
+        
+        <form method="POST" style="display: flex; gap: 10px; max-width: 600px;">
+            <input type="hidden" name="action" value="test_email">
+            <input type="email" name="test_email" placeholder="email@ejemplo.com" 
+                   style="flex: 1; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px;" required>
+            <button type="submit" class="btn btn-primary">
+                🚀 Enviar Email de Prueba
+            </button>
+        </form>
+        
+        <!-- Logs de emails -->
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #e0e0e0;">
+        
+        <h4 style="margin-bottom: 20px; color: #2c3e50;">📊 Últimos Emails Enviados</h4>
+        
+        <?php
+        $stmt = $db->query("
+            SELECT * FROM email_logs 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        ");
+        $emailLogs = $stmt->fetchAll();
+        ?>
+        
+        <?php if (empty($emailLogs)): ?>
+        <p style="color: #999; text-align: center; padding: 20px;">
+            No hay emails registrados aún
+        </p>
+        <?php else: ?>
+        <div style="overflow-x: auto;">
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">Destinatario</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">Asunto</th>
+                        <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">Estado</th>
+                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($emailLogs as $log): ?>
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 12px;"><?= htmlspecialchars($log['recipient']) ?></td>
+                        <td style="padding: 12px;">
+                            <?= htmlspecialchars($log['subject']) ?>
+                            <?php if ($log['error_message']): ?>
+                            <br><small style="color: #dc3545;"><?= htmlspecialchars($log['error_message']) ?></small>
+                            <?php endif; ?>
+                        </td>
+                        <td style="padding: 12px; text-align: center;">
+                            <?php if ($log['status'] === 'sent'): ?>
+                            <span style="background: #d4edda; color: #155724; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                                ✓ Enviado
+                            </span>
+                            <?php elseif ($log['status'] === 'failed'): ?>
+                            <span style="background: #f8d7da; color: #721c24; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                                ✗ Fallido
+                            </span>
+                            <?php else: ?>
+                            <span style="background: #fff3cd; color: #856404; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                                ⏳ Pendiente
+                            </span>
+                            <?php endif; ?>
+                        </td>
+                        <td style="padding: 12px;">
+                            <small><?= date('d/m/Y H:i', strtotime($log['created_at'])) ?></small>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
+    
+    
 
 <script>
 function switchTab(tabName) {

@@ -753,9 +753,23 @@ if ($is_youtube_stream): ?>
             return mins + ':' + (secs < 10 ? '0' : '') + secs;
         }
         
-        // Atajos de teclado
+        // ✅ ATAJOS DE TECLADO DESHABILITADOS
+        // Los atajos de teclado han sido eliminados para evitar conflictos
+        // cuando el usuario escribe en el chat (ej: tipear 'M' activaba mute)
+        //
+        // Si en el futuro quieres reactivarlos, descomenta el código de abajo
+        // y modifica la condición para que solo funcionen cuando NO estés en un input/textarea
+        
+        /*
         document.addEventListener('keydown', function(e) {
             if (!player) return;
+            
+            // ✅ IMPORTANTE: No activar atajos si estás escribiendo
+            const isTyping = document.activeElement.tagName === 'INPUT' || 
+                           document.activeElement.tagName === 'TEXTAREA' ||
+                           document.activeElement.isContentEditable;
+            
+            if (isTyping) return; // No hacer nada si está escribiendo
             
             // Espacio = Play/Pause
             if (e.code === 'Space') {
@@ -795,6 +809,7 @@ if ($is_youtube_stream): ?>
                 document.getElementById('volumeSlider').value = newVolume;
             }
         });
+        */
         
         // Limpiar intervalo al salir
         window.addEventListener('beforeunload', function() {
@@ -803,12 +818,8 @@ if ($is_youtube_stream): ?>
             }
         });
         
-        console.log('[YouTube Custom] 🎮 Controles disponibles:');
-        console.log('  - Espacio: Play/Pause');
-        console.log('  - F: Fullscreen');
-        console.log('  - M: Mute/Unmute');
-        console.log('  - ← →: Retroceder/Adelantar 5s');
-        console.log('  - ↑ ↓: Subir/Bajar volumen');
+        console.log('[YouTube Custom] ✅ Reproductor inicializado correctamente');
+        console.log('[YouTube Custom] ℹ️ Atajos de teclado deshabilitados para evitar conflictos con el chat');
     </script>
 <?php else: ?>
     <!-- Reproductor HLS (OBS) - sin cambios -->

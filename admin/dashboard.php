@@ -220,7 +220,7 @@ require_once 'styles.php';
     <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
         <div class="stat-value"><?= $r['currency'] ?> <?= number_format((float)$r['total'], 2) ?></div>
-        <div class="stat-label"><?= $isStreamer ? 'Mis Ganancias' : 'Revenue' ?></div>
+        <div class="stat-label"><?= $isStreamer ? 'Mis Ganancias' : 'Ganancia' ?></div>
     </div>
     <?php endforeach; ?>
 </div>
