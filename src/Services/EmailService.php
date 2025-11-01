@@ -697,4 +697,328 @@ Este es un email automático, por favor no respondas a este mensaje.
             ];
         }
     }
+    
+    /**
+     * ✅ NUEVO: Envía email de confirmación al usuario que envió un mensaje de contacto
+     */
+    public function sendContactConfirmation($to_email, $user_name, $subject, $message) {
+        $email_subject = "Hemos recibido tu mensaje - " . $this->config['email_from_name'];
+        
+        $html_body = $this->getContactConfirmationTemplate($user_name, $subject, $message);
+        $text_body = $this->getContactConfirmationTextTemplate($user_name, $subject, $message);
+        
+        return $this->send($to_email, $email_subject, $html_body, $text_body, 'contact_confirmation');
+    }
+    
+    /**
+     * ✅ NUEVO: Envía respuesta del administrador a un mensaje de contacto
+     */
+    public function sendContactReply($to_email, $user_name, $subject, $reply_message, $admin_name = 'Soporte') {
+        $html_body = $this->getContactReplyTemplate($user_name, $subject, $reply_message, $admin_name);
+        $text_body = $this->getContactReplyTextTemplate($user_name, $subject, $reply_message, $admin_name);
+        
+        return $this->send($to_email, $subject, $html_body, $text_body, 'contact_reply');
+    }
+    
+    /**
+     * ✅ NUEVO: Envía notificación al administrador sobre nuevo mensaje de contacto
+     */
+    public function sendContactNotificationToAdmin($admin_email, $user_name, $user_email, $subject, $message, $message_id = null) {
+        $email_subject = "Nuevo mensaje de contacto: " . $subject;
+        
+        $html_body = $this->getContactAdminNotificationTemplate($user_name, $user_email, $subject, $message, $message_id);
+        $text_body = $this->getContactAdminNotificationTextTemplate($user_name, $user_email, $subject, $message, $message_id);
+        
+        return $this->send($admin_email, $email_subject, $html_body, $text_body, 'contact_admin_notification');
+    }
+    
+    /**
+     * ✅ NUEVO: Template HTML de confirmación de contacto (para el usuario)
+     */
+    private function getContactConfirmationTemplate($user_name, $subject, $message) {
+        $site_name = $this->config['email_from_name'];
+        
+        return "
+        <!DOCTYPE html>
+        <html lang='es'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0; }
+                .header h1 { font-size: 28px; margin: 10px 0; }
+                .icon { font-size: 60px; margin-bottom: 10px; }
+                .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                .message-box { background: white; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 5px; }
+                .footer { text-align: center; margin-top: 30px; color: #999; font-size: 12px; }
+                .info-box { background: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <div class='icon'>✅</div>
+                    <h1>¡Mensaje Recibido!</h1>
+                    <p>Hemos recibido tu consulta</p>
+                </div>
+                <div class='content'>
+                    <p>Hola <strong>{$user_name}</strong>,</p>
+                    
+                    <p>Gracias por contactarnos. Hemos recibido tu mensaje y nuestro equipo lo revisará a la brevedad.</p>
+                    
+                    <div class='message-box'>
+                        <strong>📋 Resumen de tu consulta:</strong><br><br>
+                        <strong>Asunto:</strong> {$subject}<br><br>
+                        <strong>Mensaje:</strong><br>
+                        " . nl2br(htmlspecialchars($message)) . "
+                    </div>
+                    
+                    <div class='info-box'>
+                        <strong>⏱️ Tiempo de respuesta:</strong><br>
+                        Normalmente respondemos en un plazo de 24 a 48 horas hábiles. Te contestaremos directamente a este email.
+                    </div>
+                    
+                    <p><strong>Mientras tanto:</strong></p>
+                    <ul>
+                        <li>Revisa nuestra sección de <a href='#' style='color: #667eea;'>Preguntas Frecuentes</a></li>
+                        <li>Explora nuestros <a href='#' style='color: #667eea;'>Términos y Condiciones</a></li>
+                        <li>Conoce más sobre <a href='#' style='color: #667eea;'>Nuestros Servicios</a></li>
+                    </ul>
+                    
+                    <p>Si tu consulta es urgente, no dudes en contactarnos directamente.</p>
+                    
+                    <p>Saludos cordiales,<br><strong>Equipo de {$site_name}</strong></p>
+                </div>
+                <div class='footer'>
+                    <p>Este es un email automático, por favor no respondas a este mensaje.</p>
+                    <p>&copy; " . date('Y') . " {$site_name}. Todos los derechos reservados.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+    }
+    
+    /**
+     * ✅ NUEVO: Template de texto plano de confirmación de contacto
+     */
+    private function getContactConfirmationTextTemplate($user_name, $subject, $message) {
+        $site_name = $this->config['email_from_name'];
+        
+        return "Hola {$user_name},
+
+Gracias por contactarnos. Hemos recibido tu mensaje y nuestro equipo lo revisará a la brevedad.
+
+RESUMEN DE TU CONSULTA:
+Asunto: {$subject}
+
+Mensaje:
+{$message}
+
+TIEMPO DE RESPUESTA:
+Normalmente respondemos en un plazo de 24 a 48 horas hábiles. Te contestaremos directamente a este email.
+
+Si tu consulta es urgente, no dudes en contactarnos directamente.
+
+Saludos cordiales,
+Equipo de {$site_name}
+
+---
+Este es un email automático, por favor no respondas a este mensaje.
+© " . date('Y') . " {$site_name}. Todos los derechos reservados.";
+    }
+    
+    /**
+     * ✅ NUEVO: Template HTML de notificación al admin (para el administrador)
+     */
+    private function getContactAdminNotificationTemplate($user_name, $user_email, $subject, $message, $message_id) {
+        $site_name = $this->config['email_from_name'];
+        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+        $admin_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . "/admin/";
+        
+        return "
+        <!DOCTYPE html>
+        <html lang='es'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .header h1 { font-size: 24px; margin: 10px 0; }
+                .icon { font-size: 50px; margin-bottom: 10px; }
+                .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                .info-row { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #667eea; }
+                .info-row strong { color: #667eea; }
+                .message-box { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; border: 2px solid #e0e0e0; }
+                .button { display: inline-block; padding: 12px 30px; background: #667eea; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+                .footer { text-align: center; margin-top: 30px; color: #999; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <div class='icon'>📬</div>
+                    <h1>Nuevo Mensaje de Contacto</h1>
+                    <p>Se ha recibido un nuevo mensaje</p>
+                </div>
+                <div class='content'>
+                    <p><strong>¡Atención Administrador!</strong></p>
+                    
+                    <p>Se ha recibido un nuevo mensaje de contacto en {$site_name}.</p>
+                    
+                    <div class='info-row'>
+                        <strong>👤 Nombre:</strong> {$user_name}
+                    </div>
+                    
+                    <div class='info-row'>
+                        <strong>📧 Email:</strong> <a href='mailto:{$user_email}'>{$user_email}</a>
+                    </div>
+                    
+                    <div class='info-row'>
+                        <strong>📋 Asunto:</strong> {$subject}
+                    </div>
+                    
+                    " . ($message_id ? "<div class='info-row'><strong>🔢 ID del Mensaje:</strong> #{$message_id}</div>" : "") . "
+                    
+                    <div class='info-row'>
+                        <strong>📅 Fecha:</strong> " . date('d/m/Y H:i:s') . "
+                    </div>
+                    
+                    <div class='message-box'>
+                        <strong>💬 Mensaje:</strong><br><br>
+                        " . nl2br(htmlspecialchars($message)) . "
+                    </div>
+                    
+                    <div style='text-align: center; margin-top: 30px;'>
+                        <a href='mailto:{$user_email}?subject=Re: {$subject}' class='button'>Responder al Usuario</a>
+                    </div>
+                    
+                    <p style='margin-top: 30px; font-size: 12px; color: #999;'>
+                        Para gestionar todos los mensajes de contacto, accede al <a href='{$admin_url}' style='color: #667eea;'>Panel de Administración</a>.
+                    </p>
+                </div>
+                <div class='footer'>
+                    <p>Este es un email de notificación del sistema.</p>
+                    <p>&copy; " . date('Y') . " {$site_name}.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+    }
+    
+    /**
+     * ✅ NUEVO: Template de texto plano de notificación al admin
+     */
+    private function getContactAdminNotificationTextTemplate($user_name, $user_email, $subject, $message, $message_id) {
+        $site_name = $this->config['email_from_name'];
+        
+        return "NUEVO MENSAJE DE CONTACTO
+========================
+
+Se ha recibido un nuevo mensaje de contacto en {$site_name}.
+
+DATOS DEL USUARIO:
+Nombre: {$user_name}
+Email: {$user_email}
+Asunto: {$subject}
+" . ($message_id ? "ID del Mensaje: #{$message_id}\n" : "") . "
+Fecha: " . date('d/m/Y H:i:s') . "
+
+MENSAJE:
+{$message}
+
+---
+Para responder, envía un email directamente a: {$user_email}
+
+Este es un email de notificación del sistema.
+© " . date('Y') . " {$site_name}.";
+    }
+    
+    /**
+     * ✅ NUEVO: Template HTML para respuesta a mensaje de contacto
+     */
+    private function getContactReplyTemplate($user_name, $subject, $reply_message, $admin_name) {
+        $site_name = $this->config['email_from_name'];
+        
+        return "
+        <!DOCTYPE html>
+        <html lang='es'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0; }
+                .header h1 { font-size: 28px; margin: 10px 0; }
+                .icon { font-size: 60px; margin-bottom: 10px; }
+                .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                .message-box { background: white; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 5px; white-space: pre-wrap; }
+                .footer { text-align: center; margin-top: 30px; color: #999; font-size: 12px; }
+                .signature { margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <div class='icon'>💬</div>
+                    <h1>Respuesta a tu Consulta</h1>
+                    <p>Re: {$subject}</p>
+                </div>
+                <div class='content'>
+                    <p>Hola <strong>{$user_name}</strong>,</p>
+                    
+                    <p>Gracias por ponerte en contacto con nosotros. Hemos revisado tu consulta y aquí está nuestra respuesta:</p>
+                    
+                    <div class='message-box'>{$reply_message}</div>
+                    
+                    <p>Si tienes alguna pregunta adicional o necesitas más información, no dudes en responder directamente a este email. Estamos aquí para ayudarte.</p>
+                    
+                    <div class='signature'>
+                        <p>Saludos cordiales,<br>
+                        <strong>{$admin_name}</strong><br>
+                        Equipo de {$site_name}</p>
+                    </div>
+                </div>
+                <div class='footer'>
+                    <p>Este email es en respuesta a tu consulta.</p>
+                    <p>&copy; " . date('Y') . " {$site_name}. Todos los derechos reservados.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+    }
+    
+    /**
+     * ✅ NUEVO: Template de texto plano para respuesta a mensaje de contacto
+     */
+    private function getContactReplyTextTemplate($user_name, $subject, $reply_message, $admin_name) {
+        $site_name = $this->config['email_from_name'];
+        
+        return "Hola {$user_name},
+
+Gracias por ponerte en contacto con nosotros. Hemos revisado tu consulta y aquí está nuestra respuesta:
+
+Re: {$subject}
+
+---
+{$reply_message}
+---
+
+Si tienes alguna pregunta adicional o necesitas más información, no dudes en responder directamente a este email. Estamos aquí para ayudarte.
+
+Saludos cordiales,
+{$admin_name}
+Equipo de {$site_name}
+
+---
+Este email es en respuesta a tu consulta.
+© " . date('Y') . " {$site_name}. Todos los derechos reservados.";
+    }
 }

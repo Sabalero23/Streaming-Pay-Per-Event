@@ -295,6 +295,26 @@ $isModerator = $_SESSION['user_role'] === 'moderator';
                     <span class="nav-badge" id="sessionsBadge" style="display: none;">0</span>
                 </a>
                 
+                <!-- NUEVO: Mensajes de Contacto (solo para admin) -->
+                <a href="/admin/contact-messages.php" 
+                   class="<?= basename($_SERVER['PHP_SELF']) === 'contact-messages.php' ? 'active' : '' ?>"
+                   id="contactLink">
+                    📬 Mensajes
+                    <?php
+                    // Contar mensajes nuevos
+                    try {
+                        $db_temp = Database::getInstance()->getConnection();
+                        $stmt_temp = $db_temp->query("SELECT COUNT(*) FROM contact_messages WHERE status = 'new'");
+                        $newMessages = $stmt_temp ? $stmt_temp->fetchColumn() : 0;
+                        if ($newMessages > 0) {
+                            echo '<span class="nav-badge">' . $newMessages . '</span>';
+                        }
+                    } catch (Exception $e) {
+                        // Tabla no existe aún, no mostrar badge
+                    }
+                    ?>
+                </a>
+                
                 <!-- Configuración del Sistema (solo para admin) -->
                 <a href="/admin/settings.php" class="<?= basename($_SERVER['PHP_SELF']) === 'settings.php' ? 'active' : '' ?>">
                     ⚙️ Settings

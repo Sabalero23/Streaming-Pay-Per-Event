@@ -1,9 +1,10 @@
 <?php
-// public/contact.php
+// public/contact.php - CON ENVÍO DE EMAIL DE CONFIRMACIÓN
 session_start();
 
 // IMPORTANTE: Incluir Database ANTES de header.php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../src/Services/EmailService.php';
 
 $page_title = "Contacto";
 
@@ -62,37 +63,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
             
             $stmt->execute([$name, $email, $subject, $message, $ip, $userAgent]);
+            $messageId = $db->lastInsertId();
             
-            // Obtener email de contacto desde configuración
-            require_once __DIR__ . '/../src/Helpers/SiteConfig.php';
-            $contact_email = SiteConfig::get('contact_email', 'info@eventix.com.ar');
-            
-            // Opcional: Enviar email al administrador
-            $to = $contact_email;
-            $email_subject = "Eventix - Nuevo mensaje de contacto: " . $subject;
-            $email_body = "Has recibido un nuevo mensaje de contacto en Eventix\n\n";
-            $email_body .= "Nombre: $name\n";
-            $email_body .= "Email: $email\n";
-            $email_body .= "Asunto: $subject\n\n";
-            $email_body .= "Mensaje:\n$message\n\n";
-            $email_body .= "---\n";
-            $email_body .= "IP: $ip\n";
-            $email_body .= "Fecha: " . date('d/m/Y H:i:s');
-            
-            $headers = "From: noreply@eventix.com.ar\r\n";
-            $headers .= "Reply-To: $email\r\n";
-            $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-            
-            // Descomentar para enviar email real
-            // mail($to, $email_subject, $email_body, $headers);
-            
-            $success_message = '¡Mensaje enviado exitosamente! Te responderemos pronto a ' . htmlspecialchars($email);
+            // ✅ NUEVO: Enviar email de confirmación al usuario
+            try {
+                $emailService = new EmailService();
+                
+                // Email al usuario
+                $emailSent = $emailService->sendContactConfirmation($email, $name, $subject, $message);
+                
+                if ($emailSent) {
+                    $success_message = '¡Mensaje enviado exitosamente! Hemos enviado una copia a tu email <strong>' . htmlspecialchars($email) . '</strong>. Te responderemos a la brevedad.';
+                } else {
+                    $success_message = '¡Mensaje enviado exitosamente! Te responderemos pronto a ' . htmlspecialchars($email);
+                    error_log("No se pudo enviar email de confirmación al usuario: $email");
+                }
+                
+                // Email al administrador (opcional)
+                require_once __DIR__ . '/../src/Helpers/SiteConfig.php';
+                $contact_email = SiteConfig::get('contact_email', 'info@eventix.com.ar');
+                
+                $emailService->sendContactNotificationToAdmin($contact_email, $name, $email, $subject, $message, $messageId);
+                
+            } catch (Exception $e) {
+                error_log("Error enviando emails de contacto: " . $e->getMessage());
+                $success_message = '¡Mensaje enviado exitosamente! Te responderemos pronto a ' . htmlspecialchars($email);
+            }
             
             // Limpiar campos
             $name = $email = $subject = $message = '';
             
         } catch (Exception $e) {
             error_log("Error en contact.php: " . $e->getMessage());
+            require_once __DIR__ . '/../src/Helpers/SiteConfig.php';
             $contact_email = SiteConfig::get('contact_email', 'info@eventix.com.ar');
             $error_message = 'Error al enviar el mensaje. Por favor, intenta nuevamente o escríbenos directamente a ' . $contact_email;
         }
@@ -139,19 +142,24 @@ $social_youtube = SiteConfig::get('social_youtube', '');
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 40px;
-    margin-bottom: 60px;
+    margin-bottom: 50px;
 }
 
-.contact-form-section {
+@media (max-width: 768px) {
+    .contact-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.contact-form {
     background: white;
-    padding: 40px;
-    border-radius: 10px;
+    padding: 30px;
+    border-radius: 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-.contact-form-section h2 {
-    color: #222;
-    font-size: 24px;
+.contact-form h2 {
+    color: #333;
     margin-bottom: 20px;
 }
 
@@ -162,27 +170,27 @@ $social_youtube = SiteConfig::get('social_youtube', '');
 .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: #333;
-    font-weight: 500;
+    color: #555;
+    font-weight: 600;
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
     width: 100%;
-    padding: 12px 15px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    font-size: 16px;
-    transition: border-color 0.3s;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
     font-family: inherit;
+    transition: border-color 0.3s;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: #e50914;
+    border-color: #667eea;
 }
 
 .form-group textarea {
@@ -190,75 +198,57 @@ $social_youtube = SiteConfig::get('social_youtube', '');
     resize: vertical;
 }
 
-.alert {
-    padding: 15px 20px;
-    border-radius: 5px;
-    margin-bottom: 20px;
-    animation: slideIn 0.3s ease;
-}
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.alert-success {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-    color: #155724;
-}
-
-.alert-error {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-    color: #721c24;
-}
-
 .btn-submit {
-    background: #e50914;
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 15px 40px;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s;
-    width: 100%;
+    transition: opacity 0.3s;
 }
 
 .btn-submit:hover {
-    background: #b8070f;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(229, 9, 20, 0.3);
+    opacity: 0.9;
 }
 
-.btn-submit:active {
-    transform: translateY(0);
+.alert {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 14px;
 }
 
-.contact-info-section {
+.alert-success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #66bb6a;
+}
+
+.alert-error {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef5350;
+}
+
+.contact-info {
     background: white;
-    padding: 40px;
-    border-radius: 10px;
+    padding: 30px;
+    border-radius: 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-.contact-info-section h2 {
-    color: #222;
-    font-size: 24px;
-    margin-bottom: 20px;
+.contact-info h2 {
+    color: #333;
+    margin-bottom: 25px;
 }
 
 .contact-info-item {
     display: flex;
-    align-items: flex-start;
+    gap: 15px;
     margin-bottom: 25px;
     padding-bottom: 25px;
     border-bottom: 1px solid #f0f0f0;
@@ -266,42 +256,39 @@ $social_youtube = SiteConfig::get('social_youtube', '');
 
 .contact-info-item:last-child {
     border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
 }
 
 .contact-info-icon {
     width: 50px;
     height: 50px;
-    background: #f5f5f5;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 20px;
     flex-shrink: 0;
 }
 
 .contact-info-icon svg {
     width: 24px;
     height: 24px;
-    color: #e50914;
+    color: white;
 }
 
 .contact-info-content h3 {
     color: #333;
-    font-size: 18px;
     margin-bottom: 5px;
+    font-size: 16px;
 }
 
 .contact-info-content p {
     color: #666;
     margin: 0;
-    line-height: 1.6;
+    font-size: 14px;
 }
 
 .contact-info-content a {
-    color: #e50914;
+    color: #667eea;
     text-decoration: none;
 }
 
@@ -312,26 +299,23 @@ $social_youtube = SiteConfig::get('social_youtube', '');
 .social-links {
     display: flex;
     gap: 15px;
-    margin-top: 30px;
 }
 
 .social-link {
-    width: 45px;
-    height: 45px;
-    background: #f5f5f5;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    background: #f5f5f5;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #333;
-    text-decoration: none;
+    color: #667eea;
     transition: all 0.3s;
 }
 
 .social-link:hover {
-    background: #e50914;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    transform: translateY(-3px);
 }
 
 .social-link svg {
@@ -342,87 +326,90 @@ $social_youtube = SiteConfig::get('social_youtube', '');
 .faq-section {
     background: white;
     padding: 40px;
-    border-radius: 10px;
+    border-radius: 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-top: 40px;
 }
 
 .faq-section h2 {
-    color: #222;
-    font-size: 28px;
-    margin-bottom: 30px;
     text-align: center;
+    color: #333;
+    margin-bottom: 30px;
+    font-size: 28px;
 }
 
 .faq-item {
     margin-bottom: 20px;
-    border-bottom: 1px solid #f0f0f0;
-    padding-bottom: 20px;
-}
-
-.faq-item:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .faq-question {
-    color: #333;
-    font-size: 18px;
+    padding: 15px 20px;
+    background: #f9f9f9;
     font-weight: 600;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
+    color: #333;
+    cursor: pointer;
+    position: relative;
+    padding-right: 45px;
 }
 
-.faq-question::before {
-    content: "Q:";
-    color: #e50914;
-    font-weight: bold;
-    margin-right: 10px;
+.faq-question:hover {
+    background: #f0f0f0;
+}
+
+.faq-question::after {
+    content: '+';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 24px;
+    color: #667eea;
+}
+
+.faq-item.active .faq-question::after {
+    content: '−';
 }
 
 .faq-answer {
+    padding: 0 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
     color: #666;
     line-height: 1.6;
-    margin-left: 30px;
 }
 
-@media (max-width: 768px) {
-    .contact-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-    
-    .contact-header h1 {
-        font-size: 28px;
-    }
-    
-    .contact-form-section,
-    .contact-info-section,
-    .faq-section {
-        padding: 25px;
-    }
-    
-    .social-links {
-        justify-content: center;
-    }
+.faq-item.active .faq-answer {
+    padding: 15px 20px;
+    max-height: 500px;
+}
+
+.faq-answer a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.faq-answer a:hover {
+    text-decoration: underline;
 }
 </style>
 
 <div class="contact-container">
     <div class="contact-header">
-        <h1>Contacto</h1>
-        <p>¿Tienes preguntas? Estamos aquí para ayudarte</p>
+        <h1>📞 Contáctanos</h1>
+        <p>Estamos aquí para ayudarte. Envíanos tu mensaje y te responderemos lo antes posible.</p>
     </div>
 
     <div class="contact-grid">
-        <!-- Formulario de contacto -->
-        <div class="contact-form-section">
-            <h2>Envíanos un Mensaje</h2>
+        <div class="contact-form">
+            <h2>Enviar Mensaje</h2>
             
             <?php if ($success_message): ?>
             <div class="alert alert-success">
-                <?= htmlspecialchars($success_message) ?>
+                <?= $success_message ?>
             </div>
             <?php endif; ?>
             
@@ -432,42 +419,49 @@ $social_youtube = SiteConfig::get('social_youtube', '');
             </div>
             <?php endif; ?>
             
-            <form method="POST" action="">
+            <form method="POST" action="/public/contact.php">
                 <div class="form-group">
                     <label for="name">Nombre Completo *</label>
-                    <input type="text" id="name" name="name" value="<?= htmlspecialchars($name ?? '') ?>" required placeholder="Tu nombre completo">
+                    <input type="text" id="name" name="name" 
+                           value="<?= htmlspecialchars($name ?? '') ?>" 
+                           required 
+                           placeholder="Tu nombre completo">
                 </div>
                 
                 <div class="form-group">
                     <label for="email">Email *</label>
-                    <input type="email" id="email" name="email" value="<?= htmlspecialchars($email ?? '') ?>" required placeholder="tu@email.com">
+                    <input type="email" id="email" name="email" 
+                           value="<?= htmlspecialchars($email ?? '') ?>" 
+                           required 
+                           placeholder="tu@email.com">
                 </div>
                 
                 <div class="form-group">
                     <label for="subject">Asunto *</label>
                     <select id="subject" name="subject" required>
                         <option value="">Selecciona un asunto</option>
-                        <option value="Soporte Técnico" <?= (($subject ?? '') === 'Soporte Técnico') ? 'selected' : '' ?>>Soporte Técnico</option>
-                        <option value="Consulta de Pago" <?= (($subject ?? '') === 'Consulta de Pago') ? 'selected' : '' ?>>Consulta de Pago</option>
-                        <option value="Ser Streamer" <?= (($subject ?? '') === 'Ser Streamer') ? 'selected' : '' ?>>Quiero ser Streamer</option>
-                        <option value="Reembolso" <?= (($subject ?? '') === 'Reembolso') ? 'selected' : '' ?>>Solicitud de Reembolso</option>
-                        <option value="Sugerencia" <?= (($subject ?? '') === 'Sugerencia') ? 'selected' : '' ?>>Sugerencia o Mejora</option>
-                        <option value="Problema de Sesión" <?= (($subject ?? '') === 'Problema de Sesión') ? 'selected' : '' ?>>Problema de Sesión</option>
-                        <option value="Otro" <?= (($subject ?? '') === 'Otro') ? 'selected' : '' ?>>Otro</option>
+                        <option value="Soporte Técnico" <?= (isset($subject) && $subject === 'Soporte Técnico') ? 'selected' : '' ?>>Soporte Técnico</option>
+                        <option value="Consulta Sobre Pagos" <?= (isset($subject) && $subject === 'Consulta Sobre Pagos') ? 'selected' : '' ?>>Consulta Sobre Pagos</option>
+                        <option value="Quiero ser Streamer" <?= (isset($subject) && $subject === 'Quiero ser Streamer') ? 'selected' : '' ?>>Quiero ser Streamer</option>
+                        <option value="Reembolso" <?= (isset($subject) && $subject === 'Reembolso') ? 'selected' : '' ?>>Solicitud de Reembolso</option>
+                        <option value="Problema con Evento" <?= (isset($subject) && $subject === 'Problema con Evento') ? 'selected' : '' ?>>Problema con Evento</option>
+                        <option value="Sugerencia" <?= (isset($subject) && $subject === 'Sugerencia') ? 'selected' : '' ?>>Sugerencia o Feedback</option>
+                        <option value="Otro" <?= (isset($subject) && $subject === 'Otro') ? 'selected' : '' ?>>Otro</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label for="message">Mensaje *</label>
-                    <textarea id="message" name="message" required placeholder="Describe tu consulta con el mayor detalle posible..."><?= htmlspecialchars($message ?? '') ?></textarea>
+                    <textarea id="message" name="message" 
+                              required 
+                              placeholder="Describe tu consulta o mensaje..."><?= htmlspecialchars($message ?? '') ?></textarea>
                 </div>
                 
                 <button type="submit" class="btn-submit">Enviar Mensaje</button>
             </form>
         </div>
 
-        <!-- Información de contacto -->
-        <div class="contact-info-section">
+        <div class="contact-info">
             <h2>Información de Contacto</h2>
             
             <div class="contact-info-item">
@@ -603,5 +597,15 @@ $social_youtube = SiteConfig::get('social_youtube', '');
         </div>
     </div>
 </div>
+
+<script>
+// FAQ Accordion
+document.querySelectorAll('.faq-question').forEach(question => {
+    question.addEventListener('click', () => {
+        const faqItem = question.parentElement;
+        faqItem.classList.toggle('active');
+    });
+});
+</script>
 
 <?php require_once 'footer.php'; ?>
